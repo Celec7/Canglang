@@ -2,6 +2,7 @@ pub mod core;
 pub mod engine;
 pub mod ipc;
 pub mod manual;
+pub mod services;
 
 use crate::core::game::GameState;
 use crate::ipc::book::BookState;

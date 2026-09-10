@@ -1,6 +1,7 @@
 pub mod board;
 pub mod game;
 pub mod hash;
+pub mod jieqi;
 pub mod notation;
 pub mod piece;
 pub mod position;

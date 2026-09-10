@@ -432,6 +432,7 @@ name = "canglang-app"
 version = "0.1.0"
 dependencies = [
  "encoding_rs",
+ "rand",
  "reqwest",
  "rfd",
  "rusqlite",
