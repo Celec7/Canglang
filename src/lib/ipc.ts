@@ -3,6 +3,7 @@
 // 异常的 Promise。后端事件（`think://` / `bestmove://`）仍通过 @tauri-apps/api/event 订阅
 
 import { commands } from "@/bindings";
+import type { SessionError, SessionErrorCode } from "@/bindings";
 import {
   IPC_EVENTS,
   type AnalysisEvent,
@@ -17,6 +18,25 @@ export type Result<T> = { status: "ok"; data: T } | { status: "error"; error: st
 
 export async function unwrap<T>(res: Result<T>): Promise<T> {
   if (res.status === "error") throw new Error(res.error);
+  return res.data;
+}
+
+export type SessionResult<T> =
+  | { status: "ok"; data: T }
+  | { status: "error"; error: SessionError };
+
+export class SessionCommandError extends Error {
+  readonly code: SessionErrorCode;
+
+  constructor(error: SessionError) {
+    super(error.message);
+    this.name = "SessionCommandError";
+    this.code = error.code;
+  }
+}
+
+export async function unwrapSession<T>(res: SessionResult<T>): Promise<T> {
+  if (res.status === "error") throw new SessionCommandError(res.error);
   return res.data;
 }
 

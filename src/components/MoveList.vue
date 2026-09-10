@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { PlyRecord } from "@/bindings";
 import { Badge, Button, ScrollArea } from "@/components/ui";
 import MoveAnnotationEditor from "@/components/MoveAnnotationEditor.vue";
 import { useGameStore } from "@/stores/game";
 import { useManualStore } from "@/stores/manual";
+import type { UnifiedPly } from "@/stores/game";
 
 const game = useGameStore();
 const manual = useManualStore();
@@ -12,8 +12,8 @@ const navigating = ref(false);
 
 interface MoveRound {
   round: number;
-  red?: PlyRecord;
-  black?: PlyRecord;
+  red?: UnifiedPly;
+  black?: UnifiedPly;
 }
 
 const rounds = computed<MoveRound[]>(() => {

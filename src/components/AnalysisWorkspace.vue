@@ -53,6 +53,10 @@ async function moveNow() {
 
 async function changeTactic() {
   try {
+    if (!game.capabilities.analyze.enabled || !game.fen) {
+      show("当前对局不支持象棋引擎分析");
+      return;
+    }
     const excludedMove = engine.bestMove ?? engine.latestThink?.pv?.[0];
     const excluded = excludedMove ? [excludedMove] : [];
     await engine.changeTactic(

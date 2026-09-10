@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { BookMove, CloudBookMode, CloudBookStatus } from "@/bindings";
 import { commands, unwrap } from "@/lib/ipc";
+import { useGameStore } from "@/stores/game";
 
 export const useBookStore = defineStore("book", () => {
   const loaded = ref<string[]>([]);
@@ -33,6 +34,10 @@ export const useBookStore = defineStore("book", () => {
   }
 
   async function query(fen: string) {
+    if (!useGameStore().capabilities.query_book.enabled) {
+      clearQuery();
+      return;
+    }
     const version = ++queryVersion;
     moves.value = [];
     loading.value = true;

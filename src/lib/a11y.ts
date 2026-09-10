@@ -69,7 +69,7 @@ export function formatTraditionalSquareLabel(options: SquareLabelOptions): strin
     }
   }
 
-  if (isInCheck && piece && (piece === "K" || piece === "k")) {
+  if (isInCheck && piece && (piece === "K" || piece === "k" || piece.endsWith(":king"))) {
     text += "，正被将军！";
   }
 

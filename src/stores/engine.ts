@@ -96,6 +96,25 @@ export const useEngineStore = defineStore("engine", () => {
     return cause instanceof Error ? cause.message : String(cause);
   }
 
+  function xiangqiContext() {
+    const game = useGameStore();
+    if (
+      !game.capabilities.analyze.enabled ||
+      !game.fen ||
+      !game.startFen ||
+      !game.ruleProfile
+    ) {
+      throw new Error("当前对局不支持象棋引擎分析");
+    }
+    return {
+      game,
+      fen: game.fen,
+      startFen: game.startFen,
+      ruleProfile: game.ruleProfile,
+      history: game.appliedHistory.map((ply) => ply.iccs),
+    };
+  }
+
   async function subscribe() {
     if (!thinkUnlisten) {
       thinkUnlisten = await listenThink((event) => {
@@ -245,7 +264,7 @@ export const useEngineStore = defineStore("engine", () => {
     constraintStatus.value = "not_applied";
     clearPreview();
     const game = useGameStore();
-    if (analysisEnabled.value && game.result === "ongoing") {
+    if (analysisEnabled.value && game.result === "ongoing" && game.capabilities.analyze.enabled && game.fen) {
       const history = game.appliedHistory.map((ply) => ply.iccs);
       if (isControlledTurn(game.redToMove ? "red" : "black")) {
         scheduleAutoMove(game.fen, history, game.redToMove ? "red" : "black", 0);
@@ -266,10 +285,11 @@ export const useEngineStore = defineStore("engine", () => {
     config: AnalysisConfig,
     constraint: RootMoveConstraint = { candidates: [], banned: [], temporary_excluded: [] },
   ): AnalysisRequest {
+    const { startFen } = xiangqiContext();
     return {
       analysis_session_id: analysisSessionId,
       position: {
-        start_fen: useGameStore().startFen,
+        start_fen: startFen,
         history: [...history],
         current_fen: fen,
       },
@@ -295,13 +315,13 @@ export const useEngineStore = defineStore("engine", () => {
     analyzing.value = true;
     const analysisSessionId = newAnalysisSessionId();
     lastAnalysisSessionId.value = analysisSessionId;
-    const game = useGameStore();
+    const { startFen, ruleProfile } = xiangqiContext();
     activeAnalysis = {
       analysisSessionId,
-      startFen: game.startFen,
+      startFen,
       fen,
       history: [...history],
-      ruleProfile: game.ruleProfile,
+      ruleProfile,
       constraint: { candidates: [], banned: [], temporary_excluded: [] },
       retryCount: 0,
       action,
@@ -359,14 +379,14 @@ export const useEngineStore = defineStore("engine", () => {
     analyzing.value = true;
     const analysisSessionId = newAnalysisSessionId();
     lastAnalysisSessionId.value = analysisSessionId;
-    const game = useGameStore();
+    const { startFen, ruleProfile } = xiangqiContext();
     const constraint = { candidates: [], banned: [], temporary_excluded: [...excluded] };
     activeAnalysis = {
       analysisSessionId,
-      startFen: game.startFen,
+      startFen,
       fen,
       history: [...history],
-      ruleProfile: game.ruleProfile,
+      ruleProfile,
       constraint,
       action,
       retryCount,
@@ -401,8 +421,7 @@ export const useEngineStore = defineStore("engine", () => {
 
   async function analyzeWithConstraint(constraint: RootMoveConstraint) {
     if (!running.value || analyzing.value) return;
-    const game = useGameStore();
-    const history = game.appliedHistory.map((ply) => ply.iccs);
+    const { fen, startFen, ruleProfile, history } = xiangqiContext();
     const analysisSessionId = newAnalysisSessionId();
     lastAnalysisSessionId.value = analysisSessionId;
     analysisConstraint.value = {
@@ -418,17 +437,17 @@ export const useEngineStore = defineStore("engine", () => {
     analyzing.value = true;
     activeAnalysis = {
       analysisSessionId,
-      startFen: game.startFen,
-      fen: game.fen,
+      startFen,
+      fen,
       history: [...history],
-      ruleProfile: game.ruleProfile,
+      ruleProfile,
       constraint: analysisConstraint.value,
       retryCount: 0,
       action: null,
     };
     try {
       const response = await unwrap(await commands.engineAnalyze(
-        makeAnalysisRequest(analysisSessionId, game.fen, history, analysisConfig.value, analysisConstraint.value),
+        makeAnalysisRequest(analysisSessionId, fen, history, analysisConfig.value, analysisConstraint.value),
       ));
       constraintStatus.value = response.constraint_status;
       if (!response.started) {
@@ -522,7 +541,7 @@ export const useEngineStore = defineStore("engine", () => {
       if (game.result !== "ongoing" || game.appliedHistory.length < game.history.length) {
         return;
       }
-      if (!isPositionCurrent({ fen, history }, game.fen, game.appliedHistory.map((ply) => ply.iccs))) {
+      if (!game.fen || !isPositionCurrent({ fen, history }, game.fen, game.appliedHistory.map((ply) => ply.iccs))) {
         return;
       }
 
@@ -541,7 +560,12 @@ export const useEngineStore = defineStore("engine", () => {
     if (!running.value || !analysisEnabled.value) return;
 
     const game = useGameStore();
-    if (game.result !== "ongoing" || game.appliedHistory.length < game.history.length) return;
+    if (
+      game.result !== "ongoing" ||
+      game.appliedHistory.length < game.history.length ||
+      !game.capabilities.analyze.enabled ||
+      !game.fen
+    ) return;
 
     const currentTurn = game.redToMove ? "red" : "black";
     const iccsHistory = game.appliedHistory.map((p) => p.iccs);
@@ -603,6 +627,15 @@ export const useEngineStore = defineStore("engine", () => {
     bestMove.value = null;
     bestMoveAction.value = null;
     lastError.value = null;
+    clearPreview();
+  }
+
+  function clearPositionResults() {
+    multiPvMap.value = {};
+    evaluations.value = [];
+    bestMove.value = null;
+    bestMoveAction.value = null;
+    lastEvaluation.value = null;
     clearPreview();
   }
 
@@ -684,6 +717,7 @@ export const useEngineStore = defineStore("engine", () => {
     scheduleAutoMove,
     cancelAutoMove,
     clearGameEvaluations,
+    clearPositionResults,
     stop,
   };
 });

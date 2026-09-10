@@ -36,7 +36,7 @@ async function loadBook() {
   preferences.addOpeningBookPath(target);
   showPathInput.value = false;
   bookPath.value = "";
-  if (game.fen) await book.query(game.fen);
+  if (game.capabilities.query_book.enabled && game.fen) await book.query(game.fen);
 }
 
 async function playMove(iccs: string) {
@@ -55,9 +55,9 @@ watch(
   () => [game.fen, preferences.cloudBookEnabled, preferences.cloudBookMode, book.loaded.length] as const,
   ([fen, cloudEnabled, cloudMode, loadedCount]) => {
     const active = loadedCount > 0 || (cloudEnabled && cloudMode !== "local_only");
-    if (active && fen) {
+    if (active && fen && game.capabilities.query_book.enabled) {
       void book.query(fen);
-    } else if (!active) {
+    } else {
       book.clearQuery();
     }
   },

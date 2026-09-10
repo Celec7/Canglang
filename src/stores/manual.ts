@@ -107,6 +107,11 @@ export const useManualStore = defineStore("manual", () => {
   const nextNodeId = ref(1);
   let contentRevision = 0;
 
+  function currentXiangqiRecord(): { startFen: string; history: PlyRecord[] } | null {
+    if (!game.startFen || game.variant !== "xiangqi") return null;
+    return { startFen: game.startFen, history: game.xiangqiHistory };
+  }
+
   // 同步记录内容及棋谱替换，避免保存响应清除后续编辑的待保存标记
   watch(manual, () => { contentRevision++; }, { deep: true, flush: "sync" });
 
@@ -210,10 +215,12 @@ export const useManualStore = defineStore("manual", () => {
 
   async function applyNodes(nodes: ManualNode[]) {
     if (!manual.value) return false;
+    const previous = currentXiangqiRecord();
+    if (!previous) return false;
     error.value = null;
     const preservedManual = manual.value;
-    const previousStartFen = game.startFen;
-    const previousHistory = game.history.map((ply) => ply.iccs);
+    const previousStartFen = previous.startFen;
+    const previousHistory = previous.history.map((ply) => ply.iccs);
     const previousPly = game.currentPly;
     const previousActiveLineIds = [...activeLineIds.value];
     const previousCursorDepth = cursorDepth.value;
@@ -271,10 +278,12 @@ export const useManualStore = defineStore("manual", () => {
 
   function selectPly(ply: number): boolean {
     if (ply < 0) return false;
+    const current = currentXiangqiRecord();
+    if (!current) return false;
     if (!manual.value) {
-      manual.value = game.history.length > 0
-        ? syncFromGame(game.startFen, game.history)
-        : createManual(game.startFen);
+      manual.value = current.history.length > 0
+        ? syncFromGame(current.startFen, current.history)
+        : createManual(current.startFen);
       resetPath();
     }
 
@@ -294,11 +303,13 @@ export const useManualStore = defineStore("manual", () => {
   }
 
   function updateComment(nodeId: number, text: string): boolean {
+    const current = currentXiangqiRecord();
+    if (!current) return false;
     let targetManual = manual.value;
     if (!targetManual) {
-      const candidate = game.history.length > 0
-        ? syncFromGame(game.startFen, game.history)
-        : createManual(game.startFen);
+      const candidate = current.history.length > 0
+        ? syncFromGame(current.startFen, current.history)
+        : createManual(current.startFen);
       if (!findPath(candidate.root, nodeId)) return false;
       manual.value = candidate;
       resetPath();
@@ -325,10 +336,10 @@ export const useManualStore = defineStore("manual", () => {
   );
 
   async function exportPgn() {
-    if (!manual.value && game.history.length > 0) {
-      manual.value = syncFromGame(game.startFen, game.history);
-    }
-    if (!manual.value) manual.value = createManual(game.startFen);
+    const current = currentXiangqiRecord();
+    if (!current) return;
+    if (!manual.value && current.history.length > 0) manual.value = syncFromGame(current.startFen, current.history);
+    if (!manual.value) manual.value = createManual(current.startFen);
     error.value = null;
     try {
       generatedPgn.value = await commands.manualExportPgn(manual.value);
@@ -338,9 +349,9 @@ export const useManualStore = defineStore("manual", () => {
   }
 
   async function save(path: string) {
-    if (!manual.value && game.history.length > 0) {
-      manual.value = syncFromGame(game.startFen, game.history);
-    }
+    const current = currentXiangqiRecord();
+    if (!current) return;
+    if (!manual.value && current.history.length > 0) manual.value = syncFromGame(current.startFen, current.history);
     if (!manual.value) return;
     error.value = null;
     const savedRevision = contentRevision;
@@ -353,9 +364,9 @@ export const useManualStore = defineStore("manual", () => {
   }
 
   async function saveXqf(path: string, version = 10) {
-    if (!manual.value && game.history.length > 0) {
-      manual.value = syncFromGame(game.startFen, game.history);
-    }
+    const current = currentXiangqiRecord();
+    if (!current) return;
+    if (!manual.value && current.history.length > 0) manual.value = syncFromGame(current.startFen, current.history);
     if (!manual.value) return;
     error.value = null;
     const savedRevision = contentRevision;

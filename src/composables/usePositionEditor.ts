@@ -76,6 +76,10 @@ export function usePositionEditor() {
   }
 
   function open() {
+    if (!game.capabilities.edit_position.enabled || !game.fen) {
+      error.value = "当前对局不支持局面编辑";
+      return;
+    }
     loadFen(game.fen);
   }
 

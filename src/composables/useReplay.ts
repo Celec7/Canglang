@@ -16,7 +16,7 @@ export function useReplay() {
   }
 
   async function playStep() {
-    if (!isPlaying.value || !game.canRedo) {
+    if (!isPlaying.value || !game.capabilities.redo.enabled) {
       stopPlayback();
       return;
     }
@@ -29,7 +29,7 @@ export function useReplay() {
       stopPlayback();
       return;
     }
-    if (!game.canRedo) return;
+    if (!game.capabilities.redo.enabled) return;
     isPlaying.value = true;
     void playStep();
   }

@@ -19,14 +19,14 @@ const emit = defineEmits<{ (e: "update:open", value: boolean): void }>();
 
 const game = useGameStore();
 const { show } = useToast();
-const fenText = ref(game.fen);
+const fenText = ref(game.fen ?? "");
 const copied = ref(false);
 
 watch(
   () => props.open,
   (isOpen) => {
     if (isOpen) {
-      fenText.value = game.fen;
+      fenText.value = game.fen ?? "";
     }
   }
 );
@@ -49,6 +49,10 @@ async function copyFen() {
     return;
   }
   try {
+    if (!game.capabilities.use_fen.enabled || !game.fen) {
+      show("当前对局不支持 FEN");
+      return;
+    }
     await navigator.clipboard.writeText(game.fen);
     copied.value = true;
     show("FEN 已复制到剪贴板");
@@ -63,7 +67,7 @@ async function copyFen() {
 async function resetInitial() {
   try {
     if (!(await game.newGame())) return;
-    fenText.value = game.fen;
+    fenText.value = game.fen ?? "";
     show("已重置为标准开局局面");
     emit("update:open", false);
   } catch (cause) {

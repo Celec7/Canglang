@@ -518,7 +518,7 @@ const squareLabels = computed<string[]>(() => {
 });
 
 function isKing(piece: string): boolean {
-  return piece === "K" || piece === "k";
+  return piece === "K" || piece === "k" || piece.endsWith(":king");
 }
 
 function shouldShowFocusMark(): boolean {

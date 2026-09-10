@@ -6,13 +6,12 @@ import { boardToView, viewToBoard } from "@/lib/board-view";
 import {
   coordsToIccs,
   iccsToCoords,
-  parseFen,
   pieceColor,
   type Board,
   type Coord,
   type Turn,
 } from "@/lib/chess";
-import { commands, unwrap } from "@/lib/ipc";
+import { positionViewToBoard } from "@/lib/position-view";
 import { useGameStore } from "@/stores/game";
 import { useEngineStore } from "@/stores/engine";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -34,7 +33,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
   // 棋盘替换可能来自悔棋/重做、摆设局面或重放
   // 发生替换时清理临时选中状态和目标格
   watch(
-    () => [game.fen, game.result],
+    () => [game.revision, game.result],
     () => {
       selected.value = null;
       legalTargets.value = [];
@@ -47,7 +46,9 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     return iccsToCoords(list[list.length - 1].iccs);
   });
 
-  const parsedPosition = computed(() => parseFen(game.fen));
+  const parsedPosition = computed(() => game.position
+    ? positionViewToBoard(game.position)
+    : { board: Array.from({ length: 10 }, () => Array<string | null>(9).fill(null)), turn: "red" as const });
   const board = computed<Board>(() => parsedPosition.value.board);
   const turn = computed<Turn>(() => parsedPosition.value.turn);
   const inCheck = computed(() => game.inCheck);
@@ -60,7 +61,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     if (!piece || pieceColor(piece) !== turn.value) return;
 
     try {
-      const moves = await unwrap(await commands.getCandidateMoves(game.fen, row, col));
+      const moves = await game.targets(row, col);
       const targets = moves
         .map((iccs) => iccsToCoords(iccs))
         .filter((move): move is { from: Coord; to: Coord } => !!move && sameCoord(move.from, [row, col]))

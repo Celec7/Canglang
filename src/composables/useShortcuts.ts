@@ -92,13 +92,13 @@ export function useShortcuts(handlers: ShortcutHandlers = {}) {
 
     if (key === "Home" || (shift && key === "{") || (shift && key === "[")) {
       event.preventDefault();
-      void game.jumpTo(0);
+      if (game.capabilities.jump.enabled) void game.jumpTo(0);
       return;
     }
 
     if (key === "End" || (shift && key === "}") || (shift && key === "]")) {
       event.preventDefault();
-      void game.jumpTo(game.history.length);
+      if (game.capabilities.jump.enabled) void game.jumpTo(game.history.length);
       return;
     }
 
@@ -128,7 +128,7 @@ export function useShortcuts(handlers: ShortcutHandlers = {}) {
     // 6. 引擎分析与面板折叠 (E / Ctrl+E, Ctrl+1 / Ctrl+B, Ctrl+2 / Ctrl+J, M)
     if ((!mod && (key === "e" || key === "E")) || (mod && (key === "e" || key === "E"))) {
       event.preventDefault();
-      engine.setAnalysisEnabled(!engine.analysisEnabled);
+      if (game.capabilities.analyze.enabled) engine.setAnalysisEnabled(!engine.analysisEnabled);
       return;
     }
 

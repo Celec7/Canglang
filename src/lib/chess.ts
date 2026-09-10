@@ -38,10 +38,21 @@ export const PIECE_GLYPH: Record<string, string> = {
 };
 
 export function pieceGlyph(ch: string): string {
+  if (ch.startsWith("jieqi:hidden:")) return "暗";
+  if (ch.startsWith("jieqi:revealed:")) {
+    const [, , color, kind] = ch.split(":");
+    const codes: Record<string, [string, string]> = {
+      king: ["K", "k"], advisor: ["A", "a"], bishop: ["B", "b"],
+      knight: ["N", "n"], rook: ["R", "r"], cannon: ["C", "c"], pawn: ["P", "p"],
+    };
+    const code = codes[kind]?.[color === "red" ? 0 : 1];
+    return code ? PIECE_GLYPH[code] : "?";
+  }
   return PIECE_GLYPH[ch] ?? ch;
 }
 
 export function pieceColor(ch: string): "red" | "black" {
+  if (ch.startsWith("jieqi:")) return ch.split(":")[2] === "black" ? "black" : "red";
   return ch === ch.toUpperCase() ? "red" : "black";
 }
 

@@ -1,107 +1,180 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type {
-  ApplyMoveLineRequest,
-  GameSnapshot,
-  MoveResult,
-  PlyRecord,
-  PreviewRequest,
-  PreviewSnapshot,
-  RuleExplanation,
-  RuleProfile,
-  RuleStatus,
+  ApplyMoveLineRequest, JieqiPlayMode, NewGameOptions, PlyRecord, PreviewRequest,
+  PreviewSnapshot, PublicPly, RuleExplanation, RuleProfile, RuleStatus,
+  SessionCapabilities, SessionPly, SessionResult, SessionSnapshot, SessionToken,
 } from "@/bindings";
-import { commands, unwrap } from "@/lib/ipc";
+import { commands, SessionCommandError, unwrap, unwrapSession } from "@/lib/ipc";
 import { playSound } from "@/lib/sound";
-import { useManualStore } from "./manual";
 import { useEngineStore } from "./engine";
+import { useManualStore } from "./manual";
+
+export interface UnifiedPly {
+  ply: number;
+  iccs: string;
+  notation: string;
+  mover: "red" | "black";
+  is_capture: boolean;
+  is_check: boolean;
+  variant: "xiangqi" | "jieqi";
+}
+
+const disabledCapability = { enabled: false, reason: "wrong_variant" as const };
+const emptyCapabilities: SessionCapabilities = {
+  move: disabledCapability, undo: disabledCapability, redo: disabledCapability,
+  jump: disabledCapability, resign: disabledCapability, offer_draw: disabledCapability,
+  save_private: disabledCapability, save_public: disabledCapability,
+  edit_annotations: disabledCapability, analyze: disabledCapability,
+  query_book: disabledCapability, edit_position: disabledCapability, use_fen: disabledCapability,
+};
+
+function publicResult(result?: SessionResult): "ongoing" | "redwin" | "blackwin" | "draw" {
+  if (!result || result.type === "ongoing") return "ongoing";
+  if (result.type === "draw") return "draw";
+  return result.winner === "red" ? "redwin" : "blackwin";
+}
+
+function normalizePly(entry: SessionPly): UnifiedPly {
+  if (entry.variant === "xiangqi") {
+    return {
+      ...entry.ply,
+      mover: entry.ply.mover === "red" ? "red" : "black",
+      variant: "xiangqi",
+    };
+  }
+  return {
+    ply: entry.ply.ply,
+    iccs: entry.ply.iccs,
+    notation: entry.ply.notation,
+    mover: entry.ply.mover,
+    is_capture: entry.ply.captured.type !== "none",
+    is_check: entry.ply.is_check,
+    variant: "jieqi",
+  };
+}
 
 export const useGameStore = defineStore("game", () => {
-  const fen = ref("");
-  const startFen = ref("");
-  const currentFen = ref("");
-  const currentPly = ref(0);
-  const result = ref("ongoing");
-  const redToMove = ref(true);
-  const inCheck = ref(false);
-  const ruleProfile = ref<RuleProfile>("china2020");
-  const repetitionCount = ref(1);
-  const repetitionExplanation = ref<string | null>(null);
-  const ruleStatus = ref<RuleStatus>("ongoing");
-  const ruleExplanation = ref<RuleExplanation | null>(null);
-  const history = ref<PlyRecord[]>([]);
-  const canUndo = ref(false);
-  const canRedo = ref(false);
-  const lastMove = ref<MoveResult | null>(null);
+  const snapshot = ref<SessionSnapshot | null>(null);
+  const lastMove = ref<{ legal: true } | null>(null);
+  let mutationQueue: Promise<void> = Promise.resolve();
 
+  const gameId = computed(() => snapshot.value?.game_id ?? null);
+  const revision = computed(() => snapshot.value?.revision ?? null);
+  const contentRevision = computed(() => snapshot.value?.content_revision ?? null);
+  const position = computed(() => snapshot.value?.position ?? null);
+  const startPosition = computed(() => snapshot.value?.start_position ?? null);
+  const variant = computed(() => snapshot.value?.position.variant ?? null);
+  const fen = computed(() => snapshot.value?.position.variant === "xiangqi" ? snapshot.value.position.fen : null);
+  const currentFen = fen;
+  const startFen = computed(() => snapshot.value?.start_position.variant === "xiangqi" ? snapshot.value.start_position.fen : null);
+  const currentPly = computed(() => snapshot.value?.current_ply ?? 0);
+  const history = computed(() => (snapshot.value?.history ?? []).map(normalizePly));
   const appliedHistory = computed(() => history.value.slice(0, currentPly.value));
   const futureHistory = computed(() => history.value.slice(currentPly.value));
+  const xiangqiHistory = computed<PlyRecord[]>(() =>
+    (snapshot.value?.history ?? [])
+      .filter((entry): entry is Extract<SessionPly, { variant: "xiangqi" }> => entry.variant === "xiangqi")
+      .map((entry) => entry.ply),
+  );
+  const jieqiHistory = computed<PublicPly[]>(() =>
+    (snapshot.value?.history ?? [])
+      .filter((entry): entry is Extract<SessionPly, { variant: "jieqi" }> => entry.variant === "jieqi")
+      .map((entry) => entry.ply),
+  );
+  const result = computed(() => publicResult(snapshot.value?.result));
+  const redToMove = computed(() => {
+    const current = snapshot.value?.position;
+    if (!current) return true;
+    return current.variant === "jieqi"
+      ? current.position.turn === "red"
+      : current.fen.trim().split(/\s+/)[1] !== "b";
+  });
+  const inCheck = computed(() => snapshot.value?.in_check ?? false);
+  const capabilities = computed(() => snapshot.value?.capabilities ?? emptyCapabilities);
+  const canUndo = computed(() => capabilities.value.undo.enabled);
+  const canRedo = computed(() => capabilities.value.redo.enabled);
+  const ruleProfile = computed<RuleProfile | null>(() =>
+    snapshot.value?.rules.variant === "xiangqi" ? snapshot.value.rules.profile : null,
+  );
+  const playMode = computed<JieqiPlayMode | null>(() =>
+    snapshot.value?.position.variant === "jieqi" ? snapshot.value.play_mode : null,
+  );
+  const repetitionCount = computed(() => snapshot.value?.xiangqi_assessment?.repetition_count ?? 1);
+  const repetitionExplanation = computed(() => snapshot.value?.xiangqi_assessment?.repetition_explanation ?? null);
+  const ruleStatus = computed<RuleStatus>(() => snapshot.value?.xiangqi_assessment?.rule_status ?? "ongoing");
+  const ruleExplanation = computed<RuleExplanation | null>(() => snapshot.value?.xiangqi_assessment?.rule_explanation ?? null);
 
-  function applySnapshot(s: GameSnapshot) {
-    fen.value = s.current_fen || s.fen;
-    currentFen.value = s.current_fen || s.fen;
-    startFen.value = s.start_fen || s.current_fen;
-    currentPly.value = s.current_ply;
-    result.value = s.result;
-    redToMove.value = s.red_to_move;
-    inCheck.value = s.in_check;
-    ruleProfile.value = s.rule_profile;
-    repetitionCount.value = s.repetition_count;
-    repetitionExplanation.value = s.repetition_explanation;
-    ruleStatus.value = s.rule_status;
-    ruleExplanation.value = s.rule_explanation;
-    history.value = s.history;
-    canUndo.value = s.can_undo;
-    canRedo.value = s.can_redo;
+  function applySnapshot(next: SessionSnapshot) {
+    snapshot.value = next;
+  }
+
+  function token(): SessionToken {
+    const current = snapshot.value;
+    if (!current) throw new Error("对局尚未初始化");
+    return { game_id: current.game_id, expected_revision: current.revision };
   }
 
   async function refresh() {
-    applySnapshot(await commands.gameResult());
+    applySnapshot(await commands.sessionGet());
   }
 
   async function init() {
-    fen.value = await commands.getInitialBoard();
-    currentFen.value = fen.value;
-    startFen.value = fen.value;
     await refresh();
   }
 
-  async function makeMoveInternal(iccs: string, syncManual: boolean): Promise<MoveResult> {
-    const res = await unwrap(await commands.makeMove(fen.value, iccs));
-    lastMove.value = res;
-    if (res.legal) {
-      // `refresh()` 一次性返回包含新 FEN、历史和游标的 GameSnapshot
-      // 在快照到达前不要发布新 FEN，否则生命周期监听器可能把新 FEN 与旧历史一起发送给引擎
-      // 后端会正确拒绝这个不一致的上下文
-      await refresh();
+  function serializeMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = mutationQueue.then(operation, operation);
+    mutationQueue = pending.then(() => undefined, () => undefined);
+    return pending;
+  }
 
-      const latestPly = history.value[currentPly.value - 1];
-      if (syncManual) {
-        useManualStore().recordHistory(startFen.value, appliedHistory.value);
+  async function mutate(command: (sessionToken: SessionToken) => Promise<SessionSnapshot>) {
+    return serializeMutation(async () => {
+      try {
+        const next = await command(token());
+        applySnapshot(next);
+        return next;
+      } catch (cause) {
+        if (cause instanceof SessionCommandError && cause.code === "stale_session") await refresh();
+        throw cause;
       }
-      if (res.game_over) {
-        playSound("win");
-      } else if (res.check || inCheck.value) {
-        playSound("check");
-      } else if (latestPly?.is_capture) {
-        playSound("capture");
-      } else {
-        playSound("move");
-      }
+    });
+  }
+
+  async function makeMoveInternal(iccs: string, syncManual: boolean): Promise<{ legal: true }> {
+    await mutate(async (sessionToken) => unwrapSession(await commands.sessionMove(sessionToken, iccs)));
+    lastMove.value = { legal: true };
+    const latestPly = appliedHistory.value[appliedHistory.value.length - 1];
+    if (syncManual && variant.value === "xiangqi" && startFen.value) {
+      useManualStore().recordHistory(startFen.value, xiangqiHistory.value.slice(0, currentPly.value));
     }
-    return res;
+    if (result.value !== "ongoing") playSound("win");
+    else if (inCheck.value) playSound("check");
+    else if (latestPly?.is_capture) playSound("capture");
+    else playSound("move");
+    return { legal: true };
   }
 
-  async function makeMove(iccs: string): Promise<MoveResult> {
-    return makeMoveInternal(iccs, true);
-  }
+  async function makeMove(iccs: string) { return makeMoveInternal(iccs, true); }
+  async function replayMove(iccs: string) { return makeMoveInternal(iccs, false); }
 
-  // 重放已有变例，但不修改当前加载的棋谱
-  async function replayMove(iccs: string): Promise<MoveResult> {
-    return makeMoveInternal(iccs, false);
+  async function targets(row: number, col: number): Promise<string[]> {
+    const expected = token();
+    try {
+      const moves = await unwrapSession(await commands.sessionTargets(expected, { row, col }));
+      if (snapshot.value?.game_id !== expected.game_id || snapshot.value.revision !== expected.expected_revision) return [];
+      return moves;
+    } catch (cause) {
+      if (cause instanceof SessionCommandError && cause.code === "stale_session") await refresh();
+      throw cause;
+    }
   }
 
   async function previewLine(pv: string[]): Promise<PreviewSnapshot> {
+    if (!capabilities.value.analyze.enabled || !startFen.value || !fen.value || !ruleProfile.value) {
+      throw new Error("当前对局不支持象棋引擎预览");
+    }
     const request: PreviewRequest = {
       start_fen: startFen.value,
       history: appliedHistory.value.map((ply) => ply.iccs),
@@ -112,77 +185,56 @@ export const useGameStore = defineStore("game", () => {
   }
 
   async function applyPreviewPrefix(moves: string[]): Promise<void> {
-    const request: ApplyMoveLineRequest = {
-      expected_fen: currentFen.value,
-      moves: [...moves],
-    };
-    applySnapshot(await unwrap(await commands.applyMoveLine(request)));
-    useManualStore().recordHistory(startFen.value, appliedHistory.value);
+    if (!fen.value || !startFen.value) throw new Error("当前对局不支持象棋分析变例");
+    const request: ApplyMoveLineRequest = { expected_fen: fen.value, moves: [...moves] };
+    await unwrap(await commands.applyMoveLine(request));
+    await refresh();
+    useManualStore().recordHistory(startFen.value, xiangqiHistory.value.slice(0, currentPly.value));
   }
 
-  async function newGame(
-    startFenOverride?: string,
-    options: { preserveManual?: boolean; skipManualGuard?: boolean } = {},
+  async function newSession(
+    options: NewGameOptions,
+    guards: { preserveManual?: boolean; skipManualGuard?: boolean } = {},
   ): Promise<boolean> {
     const manual = useManualStore();
-    if (!options.skipManualGuard && !manual.confirmDiscard()) return false;
-    applySnapshot(await unwrap(await commands.newGame(startFenOverride ?? null)));
-    if (!options.preserveManual) manual.clear();
+    if (!guards.skipManualGuard && !manual.confirmDiscard()) return false;
+    await mutate(async (sessionToken) => unwrapSession(await commands.sessionNew(sessionToken, options)));
+    if (!guards.preserveManual) manual.clear();
     useEngineStore().clearGameEvaluations();
     return true;
   }
 
+  async function newGame(
+    startFenOverride?: string,
+    guards: { preserveManual?: boolean; skipManualGuard?: boolean } = {},
+  ) {
+    return newSession({
+      variant: "xiangqi", fen: startFenOverride ?? null,
+      rule_profile: ruleProfile.value ?? "china2020",
+    }, guards);
+  }
+
   async function setRuleProfile(profile: RuleProfile) {
-    applySnapshot(await commands.setRuleProfile(profile));
+    if (variant.value !== "xiangqi") return;
+    await newSession({ variant: "xiangqi", fen: fen.value, rule_profile: profile }, { preserveManual: true });
   }
 
-  async function undo() {
-    applySnapshot(await commands.undoMove());
-  }
-
-  async function redo() {
-    applySnapshot(await commands.redoMove());
-  }
-
+  async function undo() { await mutate(async (t) => unwrapSession(await commands.sessionUndo(t))); }
+  async function redo() { await mutate(async (t) => unwrapSession(await commands.sessionRedo(t))); }
   async function resign(side: "red" | "black") {
-    applySnapshot(await unwrap(await commands.resign(side)));
+    await mutate(async (t) => unwrapSession(await commands.sessionResign(t, side)));
   }
-
-  /// 原子跳转到指定步数游标（0 = 初始局面）
   async function jumpTo(ply: number) {
-    applySnapshot(await commands.jumpTo(ply));
+    await mutate(async (t) => unwrapSession(await commands.sessionJump(t, ply)));
   }
 
   return {
-    fen,
-    startFen,
-    currentFen,
-    currentPly,
-    result,
-    redToMove,
-    inCheck,
-    ruleProfile,
-    repetitionCount,
-    repetitionExplanation,
-    ruleStatus,
-    ruleExplanation,
-    history,
-    appliedHistory,
-    futureHistory,
-    canUndo,
-    canRedo,
-    lastMove,
-    init,
-    refresh,
-    makeMove,
-    replayMove,
-    previewLine,
-    applyPreviewPrefix,
-    newGame,
-    setRuleProfile,
-    undo,
-    redo,
-    resign,
-    jumpTo,
+    snapshot, gameId, revision, contentRevision, position, startPosition, variant,
+    fen, startFen, currentFen, currentPly, result, redToMove, inCheck, ruleProfile,
+    playMode, repetitionCount, repetitionExplanation, ruleStatus, ruleExplanation,
+    history, xiangqiHistory, jieqiHistory, appliedHistory, futureHistory,
+    capabilities, canUndo, canRedo, lastMove,
+    init, refresh, targets, makeMove, replayMove, previewLine, applyPreviewPrefix,
+    newSession, newGame, setRuleProfile, undo, redo, resign, jumpTo,
   };
 });

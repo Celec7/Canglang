@@ -33,7 +33,9 @@ export function useAppLifecycle() {
 
     try {
       await game.init();
-      await game.setRuleProfile(preferences.defaultRuleProfile);
+      if (game.ruleProfile !== preferences.defaultRuleProfile) {
+        await game.setRuleProfile(preferences.defaultRuleProfile);
+      }
     } catch (cause) {
       engine.lastError = `初始化对局失败：${cause instanceof Error ? cause.message : String(cause)}`;
       return;
@@ -62,8 +64,10 @@ export function useAppLifecycle() {
     async ([enabled, mode]) => {
       await book.setCloudEnabled(enabled).catch(() => undefined);
       await book.setCloudMode(mode).catch(() => undefined);
-      if (game.fen) {
+      if (game.capabilities.query_book.enabled && game.fen) {
         void book.query(game.fen);
+      } else {
+        book.clearQuery();
       }
     }
   );
@@ -83,8 +87,12 @@ export function useAppLifecycle() {
       game.result,
     ] as const,
     ([fen, redToMove, , running, analysisEnabled]) => {
-      if (!running || !analysisEnabled || !fen || game.result !== "ongoing") {
+      if (
+        !running || !analysisEnabled || !fen || game.result !== "ongoing" ||
+        !game.capabilities.analyze.enabled
+      ) {
         engine.cancelAutoMove();
+        engine.clearPositionResults();
         if (engine.analyzing) {
           void engine.stopAnalysis();
         }

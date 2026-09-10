@@ -78,7 +78,7 @@ afterEach(async () => {
 });
 after(async () => server?.close());
 
-function snapshot(moves, currentPly = moves.length) {
+function snapshot(moves, currentPly = moves.length, result = "ongoing", profile = "china2020") {
   const history = moves.map((iccs, index) => ({
     ply: index + 1,
     iccs,
@@ -88,27 +88,43 @@ function snapshot(moves, currentPly = moves.length) {
     is_check: false,
     fen: initialFen,
   }));
+  const capability = (enabled, reason = null) => ({ enabled, reason });
+  const ongoing = result === "ongoing";
   return {
-    fen: initialFen,
-    start_fen: initialFen,
-    current_fen: initialFen,
+    game_id: "game-1",
+    revision: `revision-${currentPly}-${result}-${profile}`,
+    content_revision: `content-${moves.length}-${result}-${profile}`,
+    position: { variant: "xiangqi", fen: initialFen },
+    start_position: { variant: "xiangqi", fen: initialFen },
+    head_ply: moves.length,
     current_ply: currentPly,
-    history,
-    result: "ongoing",
-    red_to_move: currentPly % 2 === 0,
+    source: "local",
+    rules: { variant: "xiangqi", profile },
+    play_mode: "training",
+    result: result === "ongoing" ? { type: "ongoing" }
+      : result === "draw" ? { type: "draw" }
+      : { type: "winner", winner: result === "redwin" ? "red" : "black", reason: "checkmate" },
     in_check: false,
-    can_undo: currentPly > 0,
-    can_redo: currentPly < history.length,
-    rule_profile: "china2020",
-    repetition_count: 1,
-    repetition_explanation: null,
-    rule_status: "ongoing",
-    rule_explanation: null,
+    history: history.map((ply) => ({ variant: "xiangqi", ply })),
+    xiangqi_assessment: {
+      repetition_count: 1, repetition_explanation: null,
+      rule_status: "ongoing", rule_explanation: null,
+    },
+    capabilities: {
+      move: capability(ongoing && currentPly === moves.length, ongoing ? "not_at_head" : "finished"),
+      undo: capability(currentPly > 0, "no_history"),
+      redo: capability(currentPly < moves.length, "no_future"),
+      jump: capability(true), resign: capability(ongoing), offer_draw: capability(false, "wrong_variant"),
+      save_private: capability(false, "wrong_variant"), save_public: capability(false, "wrong_variant"),
+      edit_annotations: capability(true), analyze: capability(ongoing), query_book: capability(ongoing),
+      edit_position: capability(ongoing), use_fen: capability(true),
+    },
+    draw_offer: null,
   };
 }
 
 async function prepareGame(moves, currentPly = moves.length) {
-  commands.gameResult = async () => snapshot(moves);
+  commands.sessionGet = async () => snapshot(moves, currentPly);
   const game = useGameStore();
   await game.refresh();
   const manual = useManualStore();
@@ -116,8 +132,6 @@ async function prepareGame(moves, currentPly = moves.length) {
     manual.recordMove(game.startFen, ply.iccs, ply.notation, ply.ply);
   }
   if (currentPly < moves.length) {
-    commands.jumpTo = async (ply) => snapshot(moves, ply);
-    await game.jumpTo(currentPly);
     await nextTick();
   }
   manual.dirty = false;
@@ -136,7 +150,8 @@ test("应用 PV 后保存完整棋谱，并保留原备注", async () => {
   manual.generatedPgn = "旧导出文本";
   commands.applyMoveLine = async (request) => {
     assert.deepEqual(request, { expected_fen: game.currentFen, moves: ["h9g7"] });
-    return ok(snapshot(["h2e2", "h9g7"]));
+    commands.sessionGet = async () => snapshot(["h2e2", "h9g7"]);
+    return ok({});
   };
   await game.applyPreviewPrefix(["h9g7"]);
   assert.deepEqual(manual.currentPath.map(nodeIccs), ["h2e2", "h9g7"]);
@@ -157,7 +172,7 @@ test("历史位置应用 PV 创建分支，不删除原主线或备注", async (
   const { game, manual } = await prepareGame(["h2e2", "h9g7", "h0g2"], 1);
   manual.updateComment(manual.manual.root.children[0].children[0].id, "原主线备注");
   const original = copy(manual.manual.root.children[0].children[0]);
-  commands.applyMoveLine = async () => ok(snapshot(["h2e2", "b9c7"]));
+  commands.applyMoveLine = async () => { commands.sessionGet = async () => snapshot(["h2e2", "b9c7"]); return ok({}); };
   await game.applyPreviewPrefix(["b9c7"]);
   const children = manual.manual.root.children[0].children;
   assert.equal(children.length, 2);
@@ -169,7 +184,7 @@ test("历史位置应用 PV 创建分支，不删除原主线或备注", async (
 test("棋谱为空时应用 PV 包含此前对局历史", async () => {
   const { game, manual } = await prepareGame(["h2e2"]);
   manual.clear();
-  commands.applyMoveLine = async () => ok(snapshot(["h2e2", "h9g7", "h0g2"]));
+  commands.applyMoveLine = async () => { commands.sessionGet = async () => snapshot(["h2e2", "h9g7", "h0g2"]); return ok({}); };
   await game.applyPreviewPrefix(["h9g7", "h0g2"]);
   assert.deepEqual(manual.currentPath.map(nodeIccs), ["h2e2", "h9g7", "h0g2"]);
   assert.equal(manual.dirty, true);
@@ -178,7 +193,7 @@ test("棋谱为空时应用 PV 包含此前对局历史", async () => {
 test("应用已有 PV 复用节点与备注，不标记无内容变化的棋谱", async () => {
   const { game, manual } = await prepareGame(["h2e2", "h9g7"], 1);
   const previous = copy(manual.manual);
-  commands.applyMoveLine = async () => ok(snapshot(["h2e2", "h9g7"]));
+  commands.applyMoveLine = async () => { commands.sessionGet = async () => snapshot(["h2e2", "h9g7"]); return ok({}); };
   await game.applyPreviewPrefix(["h9g7"]);
   assert.deepEqual(copy(manual.manual), previous);
   assert.deepEqual(manual.currentPath.map(nodeIccs), ["h2e2", "h9g7"]);
@@ -216,7 +231,10 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function prepareBookQueries() {
+async function prepareBookQueries() {
+  commands.sessionGet = async () => snapshot([]);
+  const game = useGameStore();
+  await game.refresh();
   const requests = new Map();
   commands.bookQuery = (fen) => {
     const request = deferred();
@@ -227,7 +245,7 @@ function prepareBookQueries() {
 }
 
 test("旧开局库响应晚到时不能覆盖最新候选", async () => {
-  const { book, requests } = prepareBookQueries();
+  const { book, requests } = await prepareBookQueries();
   const old = book.query("旧局面");
   const current = book.query("新局面");
   requests.get("新局面").resolve(ok([{ iccs: "h9g7" }]));
@@ -239,7 +257,7 @@ test("旧开局库响应晚到时不能覆盖最新候选", async () => {
 });
 
 test("新查询立即移除旧候选，旧响应不能提前结束 loading", async () => {
-  const { book, requests } = prepareBookQueries();
+  const { book, requests } = await prepareBookQueries();
   book.moves = [{ iccs: "h2e2" }];
   const old = book.query("旧局面");
   const current = book.query("新局面");
@@ -254,7 +272,7 @@ test("新查询立即移除旧候选，旧响应不能提前结束 loading", asy
 });
 
 test("清空查询使在途响应失效", async () => {
-  const { book, requests } = prepareBookQueries();
+  const { book, requests } = await prepareBookQueries();
   const pending = book.query("局面");
   book.clearQuery();
   const loadingAfterClear = book.loading;
@@ -265,7 +283,7 @@ test("清空查询使在途响应失效", async () => {
 });
 
 test("最新查询失败后不显示旧局面结果，错误仍可由调用方处理", async () => {
-  const { book, requests } = prepareBookQueries();
+  const { book, requests } = await prepareBookQueries();
   const old = book.query("旧局面");
   const current = book.query("新局面");
   const rejected = assert.rejects(current, /查询失败/);
@@ -298,8 +316,7 @@ async function mountLifecycle(t, ruleProfile) {
     activeEngineId: "test",
   });
   commands.configSave = async () => ok(null);
-  commands.getInitialBoard = async () => initialFen;
-  commands.gameResult = async () => snapshot([]);
+  commands.sessionGet = async () => snapshot([]);
   commands.bookSetCloudEnabled = async () => ok(null);
   commands.bookSetCloudMode = async () => ok(null);
   const engine = useEngineStore();
@@ -331,13 +348,13 @@ async function mountLifecycle(t, ruleProfile) {
 test("亚洲规则恢复完成前不得启动引擎", async (t) => {
   const ruleResponse = deferred();
   const requested = [];
-  commands.setRuleProfile = async (profile) => {
-    requested.push(profile);
+  commands.sessionNew = async (_token, options) => {
+    requested.push(options.rule_profile);
     return ruleResponse.promise;
   };
   const { starts, game } = await mountLifecycle(t, "asian2017");
   const startsBeforeResponse = [...starts];
-  ruleResponse.resolve({ ...snapshot([]), rule_profile: "asian2017" });
+  ruleResponse.resolve(ok(snapshot([], 0, "ongoing", "asian2017")));
   await flushLifecycle();
   assert.deepEqual(requested, ["asian2017"]);
   assert.deepEqual(startsBeforeResponse, []);
@@ -345,19 +362,19 @@ test("亚洲规则恢复完成前不得启动引擎", async (t) => {
   assert.deepEqual(starts, ["asian2017"]);
 });
 
-test("默认中国规则通过同一初始化路径应用", async (t) => {
+test("默认中国规则不替换已匹配的初始化会话", async (t) => {
   const requested = [];
-  commands.setRuleProfile = async (profile) => {
-    requested.push(profile);
-    return { ...snapshot([]), rule_profile: profile };
+  commands.sessionNew = async (_token, options) => {
+    requested.push(options.rule_profile);
+    return ok(snapshot([], 0, "ongoing", options.rule_profile));
   };
   const { starts } = await mountLifecycle(t, "china2020");
-  assert.deepEqual(requested, ["china2020"]);
+  assert.deepEqual(requested, []);
   assert.deepEqual(starts, ["china2020"]);
 });
 
 test("规则恢复失败时错误可见且引擎不启动", async (t) => {
-  commands.setRuleProfile = async () => { throw new Error("规则恢复失败"); };
+  commands.sessionNew = async () => ({ status: "error", error: { code: "io_failure", message: "规则恢复失败" } });
   const { starts, engine } = await mountLifecycle(t, "asian2017");
   assert.deepEqual(starts, []);
   assert.match(engine.lastError, /规则恢复失败/);
@@ -365,10 +382,7 @@ test("规则恢复失败时错误可见且引擎不启动", async (t) => {
 
 async function makeNextMove(game, moves) {
   const iccs = moves[moves.length - 1];
-  commands.makeMove = async () => ok({
-    legal: true, iccs, chinese_notation: iccs, check: false, game_over: false,
-  });
-  commands.gameResult = async () => snapshot(moves);
+  commands.sessionMove = async () => ok(snapshot(moves));
   await game.makeMove(iccs);
 }
 
@@ -438,7 +452,6 @@ for (const [method, command, path] of [
 
 for (const result of ["blackwin", "draw"]) {
   test(`同一局面终局 ${result} 停止分析并可在恢复对局后重新分析`, async (t) => {
-    commands.setRuleProfile = async () => snapshot([]);
     const { game, engine } = await mountLifecycle(t, "china2020");
     let analyses = 0;
     let stops = 0;
@@ -448,14 +461,14 @@ for (const result of ["blackwin", "draw"]) {
     engine.analysisEnabled = true;
     await flushLifecycle();
     assert.equal(engine.analyzing, true);
-    commands.resign = async () => ok({ ...snapshot([]), result });
+    commands.sessionResign = async () => ok(snapshot([], 0, result));
     await game.resign("red");
     await flushLifecycle();
     assert.equal(stops, 1);
     assert.equal(engine.analyzing, false);
     assert.equal(engine.running, true);
     const previousAnalyses = analyses;
-    commands.gameResult = async () => snapshot([]);
+    commands.sessionGet = async () => snapshot([]);
     await game.refresh();
     await flushLifecycle();
     assert.equal(analyses, previousAnalyses + 1);
