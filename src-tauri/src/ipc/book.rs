@@ -5,12 +5,14 @@
 
 use crate::AppError;
 use crate::core::board::BoardState;
+use crate::core::game::GameState;
 use crate::core::notation::NotationConverter;
 use crate::core::position::Move;
 use crate::core::rules::MoveValidator;
 use crate::engine::book::{CloudBookMode, OpeningBookService};
 use crate::engine::models::BookMove;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex as StdMutex;
 use tauri::State;
 use tokio::sync::Mutex;
 
@@ -103,7 +105,20 @@ pub async fn book_get_cloud_status(
 pub async fn book_query(
     fen: String,
     state: State<'_, BookState>,
+    game_state: State<'_, StdMutex<GameState>>,
 ) -> Result<Vec<BookMove>, AppError> {
+    if !game_state
+        .lock()
+        .unwrap()
+        .snapshot()
+        .capabilities
+        .query_book
+        .enabled
+    {
+        return Err(AppError::InvalidArgument(
+            "当前会话模式不支持普通象棋开局库查询".to_string(),
+        ));
+    }
     let board = BoardState::from_fen(&fen)?;
     let (mode, local_moves, cloud_client) = {
         let service = state.0.lock().await;

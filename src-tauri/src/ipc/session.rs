@@ -7,6 +7,7 @@ use crate::core::jieqi::{JieqiGame, JieqiGameError, JieqiRules};
 use crate::core::piece::Color;
 use crate::core::position::{Move, Position};
 use crate::core::rules::{MoveValidator, RuleProfile};
+use crate::ipc::engine::EngineState;
 use crate::services::jieqi_setup::create_random_jieqi_position;
 use std::sync::Mutex;
 use tauri::State;
@@ -19,10 +20,11 @@ pub fn session_get(state: State<'_, Mutex<GameState>>) -> SessionSnapshot {
 
 #[tauri::command]
 #[specta::specta]
-pub fn session_new(
+pub async fn session_new(
     token: SessionToken,
     options: NewGameOptions,
     state: State<'_, Mutex<GameState>>,
+    engine_state: State<'_, EngineState>,
 ) -> Result<SessionSnapshot, SessionError> {
     let candidate = match options {
         NewGameOptions::Xiangqi { fen, rule_profile } => {
@@ -41,7 +43,9 @@ pub fn session_new(
             ActiveGame::Jieqi(JieqiGame::new(position, play_mode))
         }
     };
-    state.lock().unwrap().replace(&token, candidate)
+    engine_state
+        .coordinate_replacement(&state, &token, candidate)
+        .await
 }
 
 #[tauri::command]

@@ -13,6 +13,7 @@
 
 use crate::AppError;
 use crate::core::board::BoardState;
+use crate::core::game::{ActiveGame, GameState, SessionSnapshot, SessionToken};
 use crate::core::notation::NotationConverter;
 use crate::engine::EngineRawLine;
 use crate::engine::config::EngineProfile;
@@ -23,7 +24,7 @@ use crate::engine::models::{
 use crate::engine::{EngineError, EngineSession};
 use crate::ipc::config::ConfigState;
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{Mutex, broadcast};
@@ -53,10 +54,22 @@ impl EngineState {
         }
     }
 
-    async fn stop_all(&self) {
+    pub(crate) async fn stop_all(&self) {
         // 先停止事件转发，避免被替换的会话在进程退出期间发布旧事件
         self.stop_forward_task().await;
         self.stop_session().await;
+    }
+
+    pub async fn coordinate_replacement(
+        &self,
+        game_state: &StdMutex<GameState>,
+        token: &SessionToken,
+        candidate: ActiveGame,
+    ) -> Result<SessionSnapshot, crate::core::game::SessionError> {
+        let _lifecycle = self.lifecycle.lock().await;
+        game_state.lock().unwrap().check_token(token)?;
+        self.stop_all().await;
+        game_state.lock().unwrap().replace(token, candidate)
     }
 }
 
@@ -113,7 +126,10 @@ pub async fn engine_start(
 pub async fn engine_analyze(
     request: AnalysisRequest,
     state: State<'_, EngineState>,
+    game_state: State<'_, StdMutex<GameState>>,
 ) -> Result<AnalysisStartResult, AppError> {
+    let _lifecycle = state.lifecycle.lock().await;
+    ensure_analysis_allowed(&game_state)?;
     let mut guard = state.session.lock().await;
     let session = guard
         .as_mut()
@@ -124,7 +140,12 @@ pub async fn engine_analyze(
 /// 中断当前搜索并发出引擎的最佳着法
 #[tauri::command]
 #[specta::specta]
-pub async fn engine_move_now(state: State<'_, EngineState>) -> Result<(), AppError> {
+pub async fn engine_move_now(
+    state: State<'_, EngineState>,
+    game_state: State<'_, StdMutex<GameState>>,
+) -> Result<(), AppError> {
+    let _lifecycle = state.lifecycle.lock().await;
+    ensure_analysis_allowed(&game_state)?;
     let mut guard = state.session.lock().await;
     let session = guard
         .as_mut()
@@ -157,12 +178,32 @@ pub async fn engine_trigger_button_option(
 pub async fn engine_change_tactic(
     request: AnalysisRequest,
     state: State<'_, EngineState>,
+    game_state: State<'_, StdMutex<GameState>>,
 ) -> Result<AnalysisStartResult, AppError> {
+    let _lifecycle = state.lifecycle.lock().await;
+    ensure_analysis_allowed(&game_state)?;
     let mut guard = state.session.lock().await;
     let session = guard
         .as_mut()
         .ok_or_else(|| AppError::Engine(EngineError::NotRunning))?;
     Ok(session.analyze(request).await?)
+}
+
+fn ensure_analysis_allowed(game_state: &StdMutex<GameState>) -> Result<(), AppError> {
+    if game_state
+        .lock()
+        .unwrap()
+        .snapshot()
+        .capabilities
+        .analyze
+        .enabled
+    {
+        Ok(())
+    } else {
+        Err(AppError::InvalidArgument(
+            "当前会话模式不支持普通象棋引擎分析".to_string(),
+        ))
+    }
 }
 
 /// 停止引擎子进程及其事件转发任务
