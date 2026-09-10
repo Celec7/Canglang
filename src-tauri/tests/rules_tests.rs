@@ -249,7 +249,7 @@ fn all_initial_legal_moves_are_actually_legal() {
 fn test_user_fen_is_not_red_win() {
     let fen = "4ka3/4a3c/3nb4/p8/4NRb2/9/P3P4/2C1BA3/5K3/2BA3r1 b";
     let board = BoardState::from_fen(fen).expect("parse fen");
-    let state = canglang_app::core::game::GameState::new(board);
+    let state = canglang_app::core::game::XiangqiGame::new(board);
     assert_eq!(
         state.result(),
         canglang_app::core::game::GameResult::Ongoing

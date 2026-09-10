@@ -5,21 +5,21 @@ use crate::core::position::Move;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum JieqiPlayMode {
     Duel,
     Training,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum JieqiSource {
     Local,
     PublicReplay,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum JieqiResultReason {
     Checkmate,
@@ -27,7 +27,7 @@ pub enum JieqiResultReason {
     Resignation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum JieqiGameResult {
     Winner {
@@ -37,7 +37,7 @@ pub enum JieqiGameResult {
     DrawAgreement,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CapturedPieceView {
     None,
@@ -45,9 +45,9 @@ pub enum CapturedPieceView {
     Hidden,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct PublicPly {
-    pub ply: usize,
+    pub ply: u32,
     pub iccs: String,
     pub mover: Color,
     pub notation: String,
@@ -56,7 +56,7 @@ pub struct PublicPly {
     pub is_check: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct DrawOffer {
     pub id: String,
     pub proposer: Color,
@@ -75,9 +75,10 @@ pub enum JieqiOperation {
     EditAnnotations,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum JieqiCapabilityReason {
+    WrongVariant,
     ReadOnly,
     DuelPolicy,
     Finished,
@@ -87,7 +88,7 @@ pub enum JieqiCapabilityReason {
     NoFuture,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct JieqiCapability {
     pub enabled: bool,
     pub reason: Option<JieqiCapabilityReason>,
@@ -164,6 +165,10 @@ impl JieqiGame {
 
     pub fn position(&self) -> &JieqiPosition {
         self.history.current()
+    }
+
+    pub fn initial_position(&self) -> &JieqiPosition {
+        &self.history.states[0]
     }
 
     pub fn history(&self) -> &[PublicPly] {
@@ -338,7 +343,7 @@ impl JieqiGame {
         let is_check = JieqiRules::is_in_check(&next, next.turn());
         let result = natural_result(&next);
         let ply = PublicPly {
-            ply: self.history.cursor + 1,
+            ply: (self.history.cursor + 1) as u32,
             iccs: mv.to_iccs(),
             mover: moving.color,
             notation,

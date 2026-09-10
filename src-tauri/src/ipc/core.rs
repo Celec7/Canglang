@@ -11,7 +11,9 @@
 
 use crate::AppError;
 use crate::core::board::{BoardState, INITIAL_FEN};
-use crate::core::game::{GameResult, GameState};
+use crate::core::game::{
+    ActiveGame, GameResult, GameState, PlyRecord, SessionMutation, XiangqiGame,
+};
 use crate::core::notation::NotationConverter;
 use crate::core::piece::Color;
 use crate::core::position::{Move, Position};
@@ -25,25 +27,6 @@ use tauri::State;
 #[specta::specta]
 pub fn ping() -> String {
     "pong".to_string()
-}
-
-/// 跨边界的权威单步历史条目
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-pub struct PlyRecord {
-    /// 步骤在主线中的序号 (1-based: 1 为第 1 步, 2 为第 2 步)
-    pub ply: u32,
-    /// 走法规范 ICCS 编码（4 字符小写，如 "h2e2"）
-    pub iccs: String,
-    /// 该走法的繁体中文记法（如 "炮二平五"）
-    pub notation: String,
-    /// 走棋方："red" | "black"
-    pub mover: String,
-    /// 该步是否吃子
-    pub is_capture: bool,
-    /// 该步是否形成将军
-    pub is_check: bool,
-    /// 该步走完后的规范化 FEN 快照
-    pub fen: String,
 }
 
 /// 对单个局面执行无状态 `make_move` 的结果
@@ -155,7 +138,12 @@ pub fn validate_position(fen: String) -> Result<String, AppError> {
 #[tauri::command]
 #[specta::specta]
 pub fn to_fen(state: State<'_, Mutex<GameState>>) -> Result<String, AppError> {
-    Ok(state.lock().unwrap().current_board().to_fen())
+    let game = state.lock().unwrap();
+    Ok(game
+        .xiangqi()
+        .map_err(legacy_session_error)?
+        .current_board()
+        .to_fen())
 }
 
 /// 对局面执行一步走法并返回结果状态
@@ -193,9 +181,21 @@ pub fn make_move(
         || MoveValidator::is_stalemate(&next_board, next_board.turn);
 
     // 让受管会话与当前对局保持一致
-    let mut game = state.lock().unwrap();
-    if game.current_board() == board && game.result() == GameResult::Ongoing {
-        game.make_move(mv);
+    let mut state = state.lock().unwrap();
+    if let Ok(game) = state.xiangqi()
+        && game.current_board() == board
+        && game.result() == GameResult::Ongoing
+    {
+        let token = state.token();
+        state
+            .mutate(&token, SessionMutation::Content, |active| match active {
+                ActiveGame::Xiangqi(game) => {
+                    game.make_move(mv);
+                    Ok(())
+                }
+                ActiveGame::Jieqi(_) => unreachable!("已在同一锁内确认普通象棋分支"),
+            })
+            .map_err(legacy_session_error)?;
     }
 
     Ok(MoveResult {
@@ -253,7 +253,7 @@ pub fn is_in_check(fen: String) -> Result<bool, AppError> {
 #[specta::specta]
 pub fn preview_line(request: PreviewRequest) -> Result<PreviewSnapshot, AppError> {
     let start = BoardState::from_fen(&request.start_fen)?;
-    let mut game = GameState::new_with_profile(start, request.rule_profile);
+    let mut game = XiangqiGame::new_with_profile(start, request.rule_profile);
     for (index, iccs) in request.history.iter().chain(request.pv.iter()).enumerate() {
         if !game.make_move_iccs(iccs) {
             return Err(AppError::InvalidArgument(format!(
@@ -287,7 +287,8 @@ pub fn apply_move_line(
     request: ApplyMoveLineRequest,
     state: State<'_, Mutex<GameState>>,
 ) -> Result<GameSnapshot, AppError> {
-    let mut game = state.lock().unwrap();
+    let mut state = state.lock().unwrap();
+    let game = state.xiangqi().map_err(legacy_session_error)?;
     if game.current_board().to_fen() != request.expected_fen {
         return Err(AppError::InvalidArgument(
             "正式棋局已变化，请重新选择变例".to_string(),
@@ -302,8 +303,14 @@ pub fn apply_move_line(
             )));
         }
     }
-    *game = candidate;
-    Ok(game_snapshot(&game))
+    let token = state.token();
+    state
+        .mutate(&token, SessionMutation::Content, |active| {
+            *active = ActiveGame::Xiangqi(candidate);
+            Ok(())
+        })
+        .map_err(legacy_session_error)?;
+    game_snapshot(&state)
 }
 
 /// 开始新对局会话，可选从给定 FEN 开始（默认初始局面）
@@ -313,32 +320,66 @@ pub fn new_game(
     fen: Option<String>,
     state: State<'_, Mutex<GameState>>,
 ) -> Result<GameSnapshot, AppError> {
-    let mut game = state.lock().unwrap();
-    let rule_profile = game.rule_profile();
-    *game = match fen {
+    let (rule_profile, token) = {
+        let state = state.lock().unwrap();
+        (
+            state
+                .xiangqi()
+                .map_err(legacy_session_error)?
+                .rule_profile(),
+            state.token(),
+        )
+    };
+    let candidate = match fen {
         Some(fen_str) => {
             let board = BoardState::from_fen(&fen_str)?;
             MoveValidator::validate_board(&board)?;
-            GameState::new_with_profile(board, rule_profile)
+            ActiveGame::Xiangqi(XiangqiGame::new_with_profile(board, rule_profile))
         }
-        None => GameState::new_with_profile(BoardState::default(), rule_profile),
+        None => ActiveGame::Xiangqi(XiangqiGame::new_with_profile(
+            BoardState::default(),
+            rule_profile,
+        )),
     };
-    Ok(game_snapshot(&game))
+    let mut state = state.lock().unwrap();
+    state
+        .replace(&token, candidate)
+        .map_err(legacy_session_error)?;
+    game_snapshot(&state)
 }
 
 /// 切换当前对局使用的规则档案
 #[tauri::command]
 #[specta::specta]
-pub fn set_rule_profile(profile: RuleProfile, state: State<'_, Mutex<GameState>>) -> GameSnapshot {
-    let mut game = state.lock().unwrap();
-    game.set_rule_profile(profile);
-    game_snapshot(&game)
+pub fn set_rule_profile(
+    profile: RuleProfile,
+    state: State<'_, Mutex<GameState>>,
+) -> Result<GameSnapshot, AppError> {
+    let mut state = state.lock().unwrap();
+    let token = state.token();
+    state
+        .mutate(
+            &token,
+            SessionMutation::Presentation,
+            |active| match active {
+                ActiveGame::Xiangqi(game) => {
+                    game.set_rule_profile(profile);
+                    Ok(())
+                }
+                ActiveGame::Jieqi(_) => Err(crate::core::game::SessionError::new(
+                    crate::core::game::SessionErrorCode::OperationUnavailable,
+                    "揭棋不能切换普通象棋规则档案",
+                )),
+            },
+        )
+        .map_err(legacy_session_error)?;
+    game_snapshot(&state)
 }
 
 /// 返回当前对局会话的快照
 #[tauri::command]
 #[specta::specta]
-pub fn game_result(state: State<'_, Mutex<GameState>>) -> GameSnapshot {
+pub fn game_result(state: State<'_, Mutex<GameState>>) -> Result<GameSnapshot, AppError> {
     let game = state.lock().unwrap();
     game_snapshot(&game)
 }
@@ -346,38 +387,36 @@ pub fn game_result(state: State<'_, Mutex<GameState>>) -> GameSnapshot {
 /// 悔掉会话中的上一步
 #[tauri::command]
 #[specta::specta]
-pub fn undo_move(state: State<'_, Mutex<GameState>>) -> GameSnapshot {
-    let mut game = state.lock().unwrap();
-    game.undo_move();
-    game_snapshot(&game)
+pub fn undo_move(state: State<'_, Mutex<GameState>>) -> Result<GameSnapshot, AppError> {
+    legacy_mutation(state, SessionMutation::Presentation, |game| {
+        game.undo_move();
+    })
 }
 
 /// 重新应用刚悔掉的这一步
 #[tauri::command]
 #[specta::specta]
-pub fn redo_move(state: State<'_, Mutex<GameState>>) -> GameSnapshot {
-    let mut game = state.lock().unwrap();
-    game.redo_move();
-    game_snapshot(&game)
+pub fn redo_move(state: State<'_, Mutex<GameState>>) -> Result<GameSnapshot, AppError> {
+    legacy_mutation(state, SessionMutation::Presentation, |game| {
+        game.redo_move();
+    })
 }
 
 /// 将当前对局会话定位到指定步数游标（0 为起始局面）
 #[tauri::command]
 #[specta::specta]
-pub fn jump_to(ply: u32, state: State<'_, Mutex<GameState>>) -> GameSnapshot {
-    let mut game = state.lock().unwrap();
-    game.jump_to(ply as usize);
-    game_snapshot(&game)
+pub fn jump_to(ply: u32, state: State<'_, Mutex<GameState>>) -> Result<GameSnapshot, AppError> {
+    legacy_mutation(state, SessionMutation::Presentation, |game| {
+        game.jump_to(ply as usize);
+    })
 }
 
 /// 标记指定一方（`red` / `black`）认输
 #[tauri::command]
 #[specta::specta]
 pub fn resign(color: String, state: State<'_, Mutex<GameState>>) -> Result<GameSnapshot, AppError> {
-    let mut game = state.lock().unwrap();
     let side = parse_resign_color(&color)?;
-    game.resign(side);
-    Ok(game_snapshot(&game))
+    legacy_mutation(state, SessionMutation::Content, |game| game.resign(side))
 }
 
 fn parse_resign_color(color: &str) -> Result<Color, AppError> {
@@ -390,7 +429,8 @@ fn parse_resign_color(color: &str) -> Result<Color, AppError> {
     }
 }
 
-fn game_snapshot(game: &GameState) -> GameSnapshot {
+fn game_snapshot(state: &GameState) -> Result<GameSnapshot, AppError> {
+    let game = state.xiangqi().map_err(legacy_session_error)?;
     let rule_assessment = game.rule_assessment();
     let current_fen = game.current_board().to_fen();
     let full_history = game.full_history();
@@ -412,7 +452,7 @@ fn game_snapshot(game: &GameState) -> GameSnapshot {
         })
         .collect();
 
-    GameSnapshot {
+    Ok(GameSnapshot {
         fen: current_fen.clone(),
         start_fen: game.start_fen(),
         current_fen,
@@ -428,7 +468,33 @@ fn game_snapshot(game: &GameState) -> GameSnapshot {
         repetition_explanation: game.repetition_assessment().explanation,
         rule_status: rule_assessment.status,
         rule_explanation: rule_assessment.explanation,
-    }
+    })
+}
+
+fn legacy_mutation(
+    state: State<'_, Mutex<GameState>>,
+    mutation: SessionMutation,
+    apply: impl FnOnce(&mut XiangqiGame),
+) -> Result<GameSnapshot, AppError> {
+    let mut state = state.lock().unwrap();
+    let token = state.token();
+    state
+        .mutate(&token, mutation, |active| match active {
+            ActiveGame::Xiangqi(game) => {
+                apply(game);
+                Ok(())
+            }
+            ActiveGame::Jieqi(_) => Err(crate::core::game::SessionError::new(
+                crate::core::game::SessionErrorCode::OperationUnavailable,
+                "当前揭棋会话不支持旧象棋命令",
+            )),
+        })
+        .map_err(legacy_session_error)?;
+    game_snapshot(&state)
+}
+
+fn legacy_session_error(error: crate::core::game::SessionError) -> AppError {
+    AppError::InvalidArgument(error.message)
 }
 
 fn game_result_str(result: GameResult) -> String {

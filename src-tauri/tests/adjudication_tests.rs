@@ -1,9 +1,9 @@
-use canglang_app::core::game::GameState;
+use canglang_app::core::game::XiangqiGame;
 use canglang_app::core::rules::{MoveEffect, RuleExplanationCode, RuleProfile, RuleStatus};
 
 #[test]
 fn rule_profile_and_basic_effects_survive_a_game_session() {
-    let mut game = GameState::new_with_profile(
+    let mut game = XiangqiGame::new_with_profile(
         canglang_app::core::board::BoardState::initial(),
         RuleProfile::Asian2017,
     );
@@ -17,7 +17,7 @@ fn rule_profile_and_basic_effects_survive_a_game_session() {
 
 #[test]
 fn repeated_position_returns_structured_pending_explanation() {
-    let mut game = GameState::default();
+    let mut game = XiangqiGame::default();
     for iccs in [
         "h2e2", "h9g7", "e2h2", "g7h9", "h2e2", "h9g7", "e2h2", "g7h9",
     ] {
@@ -40,7 +40,7 @@ fn repeated_position_returns_structured_pending_explanation() {
 fn legal_perpetual_check_cycle_identifies_the_checking_side() {
     let board =
         canglang_app::core::board::BoardState::from_fen("3k5/4R4/9/9/4P4/9/9/9/9/4K4 w").unwrap();
-    let mut game = GameState::new_with_profile(board, RuleProfile::China2020);
+    let mut game = XiangqiGame::new_with_profile(board, RuleProfile::China2020);
 
     for (index, iccs) in [
         "e8d8", "d9e9", "d8e8", "e9d9", "e8d8", "d9e9", "d8e8", "e9d9",
@@ -64,7 +64,7 @@ fn legal_perpetual_check_cycle_identifies_the_checking_side() {
 fn legal_perpetual_chase_cycle_is_an_asian_same_kind_exception() {
     let board =
         canglang_app::core::board::BoardState::from_fen("3k5/9/9/9/5r3/4R4/4p4/9/9/4K4 w").unwrap();
-    let mut game = GameState::new_with_profile(board, RuleProfile::Asian2017);
+    let mut game = XiangqiGame::new_with_profile(board, RuleProfile::Asian2017);
 
     for iccs in [
         "e4f4", "f5e5", "f4e4", "e5f5", "e4f4", "f5e5", "f4e4", "e5f5",
@@ -84,7 +84,7 @@ fn legal_perpetual_chase_cycle_is_an_asian_same_kind_exception() {
 fn legal_perpetual_chase_cycle_is_a_china_single_side_loss() {
     let board =
         canglang_app::core::board::BoardState::from_fen("3k5/9/9/9/5r3/4R4/4p4/9/9/4K4 w").unwrap();
-    let mut game = GameState::new_with_profile(board, RuleProfile::China2020);
+    let mut game = XiangqiGame::new_with_profile(board, RuleProfile::China2020);
 
     for iccs in [
         "e4f4", "f5e5", "f4e4", "e5f5", "e4f4", "f5e5", "f4e4", "e5f5",

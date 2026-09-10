@@ -3,7 +3,7 @@ use crate::core::piece::{Color, PieceKind};
 use crate::core::position::Position;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum JieqiPublicKind {
     King,
@@ -29,7 +29,7 @@ impl From<PieceKind> for JieqiPublicKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum JieqiPieceView {
     Hidden {
@@ -52,7 +52,7 @@ impl JieqiPieceView {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct JieqiPositionViewV1 {
     pub turn: Color,
     pub pieces: Vec<JieqiPieceView>,

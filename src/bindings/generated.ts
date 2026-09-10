@@ -35,19 +35,30 @@ export const commands = {
 	/**  开始新对局会话，可选从给定 FEN 开始（默认初始局面） */
 	newGame: (fen: string | null) => typedError<GameSnapshot, string>(__TAURI_INVOKE("new_game", { fen })),
 	/**  切换当前对局使用的规则档案 */
-	setRuleProfile: (profile: RuleProfile) => __TAURI_INVOKE<GameSnapshot>("set_rule_profile", { profile }),
+	setRuleProfile: (profile: RuleProfile) => typedError<GameSnapshot, string>(__TAURI_INVOKE("set_rule_profile", { profile })),
 	/**  返回当前对局会话的快照 */
-	gameResult: () => __TAURI_INVOKE<GameSnapshot>("game_result"),
+	gameResult: () => typedError<GameSnapshot, string>(__TAURI_INVOKE("game_result")),
 	/**  悔掉会话中的上一步 */
-	undoMove: () => __TAURI_INVOKE<GameSnapshot>("undo_move"),
+	undoMove: () => typedError<GameSnapshot, string>(__TAURI_INVOKE("undo_move")),
 	/**  重新应用刚悔掉的这一步 */
-	redoMove: () => __TAURI_INVOKE<GameSnapshot>("redo_move"),
+	redoMove: () => typedError<GameSnapshot, string>(__TAURI_INVOKE("redo_move")),
 	/**  将当前对局会话定位到指定步数游标（0 为起始局面） */
-	jumpTo: (ply: number) => __TAURI_INVOKE<GameSnapshot>("jump_to", { ply }),
+	jumpTo: (ply: number) => typedError<GameSnapshot, string>(__TAURI_INVOKE("jump_to", { ply })),
 	/**  标记指定一方（`red` / `black`）认输 */
 	resign: (color: string) => typedError<GameSnapshot, string>(__TAURI_INVOKE("resign", { color })),
 	/**  用于验证 IPC 桥接已连通的握手命令 */
 	ping: () => __TAURI_INVOKE<string>("ping"),
+	sessionGet: () => __TAURI_INVOKE<SessionSnapshot>("session_get"),
+	sessionNew: (token: SessionToken, options: NewGameOptions) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_new", { token, options })),
+	sessionTargets: (token: SessionToken, from: Position) => typedError<string[], SessionError>(__TAURI_INVOKE("session_targets", { token, from })),
+	sessionMove: (token: SessionToken, iccs: string) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_move", { token, iccs })),
+	sessionUndo: (token: SessionToken) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_undo", { token })),
+	sessionRedo: (token: SessionToken) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_redo", { token })),
+	sessionJump: (token: SessionToken, ply: number) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_jump", { token, ply })),
+	sessionResign: (token: SessionToken, side: Color) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_resign", { token, side })),
+	sessionOfferDraw: (token: SessionToken, side: Color) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_offer_draw", { token, side })),
+	sessionRespondDraw: (token: SessionToken, offerId: string, side: Color, accept: boolean) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_respond_draw", { token, offerId, side, accept })),
+	sessionCancelDraw: (token: SessionToken, offerId: string, side: Color) => typedError<SessionSnapshot, SessionError>(__TAURI_INVOKE("session_cancel_draw", { token, offerId, side })),
 	/**  启动（或重启）引擎子进程并开始转发其事件 */
 	engineStart: (config: EngineConfig) => typedError<EngineInfo, string>(__TAURI_INVOKE("engine_start", { config })),
 	/**  开始对给定局面进行分析 */
@@ -187,6 +198,8 @@ export type BookMove = {
 	source: string,
 };
 
+export type CapturedPieceView = { type: "none" } | { type: "revealed"; kind: JieqiPublicKind } | { type: "hidden" };
+
 /**  完整棋谱数据模型 */
 export type ChessManual = {
 	title: string,
@@ -215,6 +228,9 @@ export type CloudBookStatus = {
 	mode: CloudBookMode,
 };
 
+/**  棋子阵营（红方 / 黑方） */
+export type Color = "red" | "black";
+
 /**  配置文件位置与便携模式状态 */
 export type ConfigLocationInfo = {
 	filePath: string,
@@ -228,6 +244,11 @@ export type ConfigLocationInfo = {
 
 /**  根节点约束应用结果，供前端显示真实状态 */
 export type ConstraintApplicationStatus = "applied" | "not_applied" | "unsupported";
+
+export type DrawOffer = {
+	id: string,
+	proposer: Color,
+};
 
 /**  引擎协议与根节点约束能力 */
 export type EngineCapabilities = {
@@ -349,6 +370,24 @@ export type GameSnapshot = {
 	rule_explanation: RuleExplanation | null,
 };
 
+export type JieqiCapability = {
+	enabled: boolean,
+	reason: JieqiCapabilityReason | null,
+};
+
+export type JieqiCapabilityReason = "wrong_variant" | "read_only" | "duel_policy" | "finished" | "not_at_head" | "pending_draw" | "no_history" | "no_future";
+
+export type JieqiPieceView = { state: "hidden"; position: Position; color: Color; move_as: JieqiPublicKind } | { state: "revealed"; position: Position; color: Color; kind: JieqiPublicKind };
+
+export type JieqiPlayMode = "duel" | "training";
+
+export type JieqiPositionViewV1 = {
+	turn: Color,
+	pieces: JieqiPieceView[],
+};
+
+export type JieqiPublicKind = "king" | "advisor" | "bishop" | "knight" | "rook" | "cannon" | "pawn";
+
 /**
  *  棋谱变例树节点（多叉树结构）
  *  `children[0]` 为主线后继节点，`children[1..]` 为变例分支节点
@@ -396,21 +435,15 @@ export type MoveResult = {
 	game_over: boolean,
 };
 
-/**  跨边界的权威单步历史条目 */
+export type NewGameOptions = { variant: "xiangqi"; fen: string | null; rule_profile: RuleProfile } | { variant: "jieqi"; play_mode: JieqiPlayMode };
+
 export type PlyRecord = {
-	/**  步骤在主线中的序号 (1-based: 1 为第 1 步, 2 为第 2 步) */
 	ply: number,
-	/**  走法规范 ICCS 编码（4 字符小写，如 "h2e2"） */
 	iccs: string,
-	/**  该走法的繁体中文记法（如 "炮二平五"） */
 	notation: string,
-	/**  走棋方："red" | "black" */
 	mover: string,
-	/**  该步是否吃子 */
 	is_capture: boolean,
-	/**  该步是否形成将军 */
 	is_check: boolean,
-	/**  该步走完后的规范化 FEN 快照 */
 	fen: string,
 };
 
@@ -423,6 +456,8 @@ export type Position = {
 	row: number,
 	col: number,
 };
+
+export type PositionView = { variant: "xiangqi"; fen: string } | { variant: "jieqi"; position: JieqiPositionViewV1 };
 
 /**  只读分析变例预览请求，不修改受管 GameState */
 export type PreviewRequest = {
@@ -442,6 +477,16 @@ export type PreviewSnapshot = {
 	rule_status: RuleStatus,
 	rule_explanation: RuleExplanation | null,
 	applied_pv_len: number,
+};
+
+export type PublicPly = {
+	ply: number,
+	iccs: string,
+	mover: Color,
+	notation: string,
+	revealed: JieqiPublicKind | null,
+	captured: CapturedPieceView,
+	is_check: boolean,
 };
 
 /**  当前分析请求的根节点着法约束 */
@@ -473,6 +518,70 @@ export type RuleProfile = "china2020" | "asian2017";
 
 /**  当前规则裁判状态 */
 export type RuleStatus = "ongoing" | "checkmate" | "stalemate" | "repetition_pending" | "prohibited_move_pending" | "red_loss_by_rule" | "black_loss_by_rule" | "draw_by_rule";
+
+export type SessionCapabilities = {
+	move: JieqiCapability,
+	undo: JieqiCapability,
+	redo: JieqiCapability,
+	jump: JieqiCapability,
+	resign: JieqiCapability,
+	offer_draw: JieqiCapability,
+	save_private: JieqiCapability,
+	save_public: JieqiCapability,
+	edit_annotations: JieqiCapability,
+	analyze: JieqiCapability,
+	query_book: JieqiCapability,
+	edit_position: JieqiCapability,
+	use_fen: JieqiCapability,
+};
+
+export type SessionError = {
+	code: SessionErrorCode,
+	message: string,
+};
+
+export type SessionErrorCode = "stale_session" | "invalid_input" | "illegal_move" | "operation_unavailable" | "game_finished" | "io_failure";
+
+export type SessionPly = { variant: "xiangqi"; ply: PlyRecord } | { variant: "jieqi"; ply: PublicPly };
+
+export type SessionResult = { type: "ongoing" } | { type: "winner"; winner: Color; reason: SessionResultReason } | { type: "draw" };
+
+export type SessionResultReason = "checkmate" | "stalemate" | "resignation" | "agreement";
+
+export type SessionRules = { variant: "xiangqi"; profile: RuleProfile } | { variant: "jieqi_casual_v1" };
+
+export type SessionSnapshot = {
+	game_id: string,
+	revision: string,
+	content_revision: string,
+	position: PositionView,
+	start_position: PositionView,
+	head_ply: number,
+	current_ply: number,
+	source: SessionSource,
+	rules: SessionRules,
+	play_mode: JieqiPlayMode,
+	result: SessionResult,
+	in_check: boolean,
+	history: SessionPly[],
+	xiangqi_assessment: XiangqiAssessment | null,
+	capabilities: SessionCapabilities,
+	draw_offer: DrawOffer | null,
+};
+
+export type SessionSource = "local" | "public_replay";
+
+export type SessionToken = {
+	game_id: string,
+	expected_revision: string,
+};
+
+export type XiangqiAssessment = {
+	repetition_count: number,
+	repetition_explanation: string | null,
+	rule_status: RuleStatus,
+	rule_explanation: RuleExplanation | null,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
