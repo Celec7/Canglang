@@ -1,0 +1,405 @@
+import { computed, ref, watch } from "vue";
+import { defineStore } from "pinia";
+import type { ChessManual, ManualNode, PlyRecord } from "@/bindings";
+import { coordsToIccs, iccsToCoords, INITIAL_FEN } from "@/lib/chess";
+import { commands, unwrap } from "@/lib/ipc";
+import { useGameStore } from "@/stores/game";
+
+function syncFromGame(startFen: string, history: PlyRecord[]): ChessManual {
+  const root: ManualNode = {
+    id: 0,
+    mv: null,
+    chinese_notation: "开始局面",
+    comment: null,
+    score: null,
+    children: [],
+  };
+
+  let current = root;
+  for (const ply of history) {
+    const coords = iccsToCoords(ply.iccs);
+    const child: ManualNode = {
+      id: ply.ply,
+      mv: coords
+        ? {
+            from: { row: coords.from[0], col: coords.from[1] },
+            to: { row: coords.to[0], col: coords.to[1] },
+          }
+        : null,
+      chinese_notation: ply.notation,
+      comment: null,
+      score: null,
+      children: [],
+    };
+    current.children.push(child);
+    current = child;
+  }
+
+  return {
+    title: "对局记录",
+    date: new Date().toISOString().slice(0, 10),
+    red_player: null,
+    black_player: null,
+    event_name: null,
+    start_fen: startFen || INITIAL_FEN,
+    root,
+  };
+}
+
+function nodeMove(node: ManualNode): string | null {
+  return node.mv ? coordsToIccs([node.mv.from.row, node.mv.from.col], [node.mv.to.row, node.mv.to.col]) : null;
+}
+
+function lastNode(nodes: ManualNode[]): ManualNode | undefined {
+  return nodes[nodes.length - 1];
+}
+
+function maxNodeId(node: ManualNode): number {
+  return Math.max(node.id, ...node.children.map((child) => maxNodeId(child)));
+}
+
+function appendMainline(node: ManualNode, result: ManualNode[]) {
+  let current: ManualNode | undefined = node;
+  while (current) {
+    result.push(current);
+    current = current.children[0];
+  }
+}
+
+function findPath(root: ManualNode, targetId: number, path: ManualNode[] = []): ManualNode[] | null {
+  const nextPath = [...path, root];
+  if (root.id === targetId) return nextPath;
+  for (const child of root.children) {
+    const found = findPath(child, targetId, nextPath);
+    if (found) return found;
+  }
+  return null;
+}
+
+function createManual(startFen: string): ChessManual {
+  return {
+    title: "未命名棋谱",
+    date: null,
+    red_player: null,
+    black_player: null,
+    event_name: null,
+    start_fen: startFen || INITIAL_FEN,
+    root: {
+      id: 0,
+      mv: null,
+      chinese_notation: "开始局面",
+      comment: null,
+      score: null,
+      children: [],
+    },
+  };
+}
+
+export const useManualStore = defineStore("manual", () => {
+  const game = useGameStore();
+  const manual = ref<ChessManual | null>(null);
+  const generatedPgn = ref("");
+  const loading = ref(false);
+  const error = ref<string | null>(null);
+  const dirty = ref(false);
+  const activeLineIds = ref<number[]>([]);
+  const cursorDepth = ref(0);
+  const nextNodeId = ref(1);
+  let contentRevision = 0;
+
+  // 同步记录内容及棋谱替换，避免保存响应清除后续编辑的待保存标记
+  watch(manual, () => { contentRevision++; }, { deep: true, flush: "sync" });
+
+  const currentPath = computed(() => {
+    if (!manual.value) return [];
+    return activeLineIds.value.slice(0, cursorDepth.value)
+      .map((id) => lastNode(findPath(manual.value!.root, id) ?? []) ?? null)
+      .filter((node): node is ManualNode => !!node);
+  });
+
+  const activeLine = computed(() => {
+    if (!manual.value) return [];
+    return activeLineIds.value
+      .map((id) => lastNode(findPath(manual.value!.root, id) ?? []) ?? null)
+      .filter((node): node is ManualNode => !!node);
+  });
+
+  const mainlineNodes = computed(() => {
+    if (!manual.value) return [];
+    const nodes: ManualNode[] = [];
+    appendMainline(manual.value.root, nodes);
+    return nodes.filter((node) => node.mv);
+  });
+
+  const currentNode = computed(() => {
+    if (!manual.value) return null;
+    return lastNode(currentPath.value) ?? manual.value.root;
+  });
+
+  const nextBranches = computed(() => currentNode.value?.children ?? []);
+
+  function resetPath() {
+    activeLineIds.value = [];
+    cursorDepth.value = 0;
+    nextNodeId.value = manual.value ? maxNodeId(manual.value.root) + 1 : 1;
+  }
+
+  function setPath(nodes: ManualNode[]) {
+    activeLineIds.value = nodes.filter((node) => node.mv).map((node) => node.id);
+    cursorDepth.value = activeLineIds.value.length;
+    nextNodeId.value = manual.value ? maxNodeId(manual.value.root) + 1 : 1;
+  }
+
+  function recordMove(startFen: string, iccs: string, notation: string, depth: number) {
+    if (!manual.value) manual.value = createManual(startFen);
+    const boundedDepth = Math.max(0, depth - 1);
+    const sourcePath = activeLineIds.value;
+    const parentPath = sourcePath.slice(0, boundedDepth);
+    const parent = parentPath.length > 0
+      ? lastNode(findPath(manual.value.root, parentPath[parentPath.length - 1]) ?? []) ?? manual.value.root
+      : manual.value.root;
+    let child = parent.children.find((candidate) => nodeMove(candidate) === iccs);
+    if (!child) {
+      const move = iccsToCoords(iccs);
+      if (!move) return;
+      child = {
+        id: nextNodeId.value++,
+        mv: {
+          from: { row: move.from[0], col: move.from[1] },
+          to: { row: move.to[0], col: move.to[1] },
+        },
+        chinese_notation: notation,
+        comment: null,
+        score: null,
+        children: [],
+      };
+      parent.children.push(child);
+      generatedPgn.value = "";
+      dirty.value = true;
+    }
+    const nextPath = [...parentPath, child.id];
+    activeLineIds.value = nextPath;
+    cursorDepth.value = nextPath.length;
+  }
+
+  // 以权威历史定位整条当前路径，复用已有节点，保留原分支与备注
+  function recordHistory(startFen: string, history: PlyRecord[]) {
+    for (const ply of history) {
+      recordMove(startFen, ply.iccs, ply.notation, ply.ply);
+    }
+  }
+
+  async function load(path: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      manual.value = await unwrap(await commands.manualLoad(path.trim()));
+      generatedPgn.value = "";
+      resetPath();
+      dirty.value = false;
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function pickFile(action: "open" | "save"): Promise<string | null> {
+    return unwrap(await commands.manualPickFile(action));
+  }
+
+  async function applyNodes(nodes: ManualNode[]) {
+    if (!manual.value) return false;
+    error.value = null;
+    const preservedManual = manual.value;
+    const previousStartFen = game.startFen;
+    const previousHistory = game.history.map((ply) => ply.iccs);
+    const previousPly = game.currentPly;
+    const previousActiveLineIds = [...activeLineIds.value];
+    const previousCursorDepth = cursorDepth.value;
+    const previousDirty = dirty.value;
+    try {
+      const reset = await game.newGame(manual.value.start_fen || undefined, {
+        preserveManual: true,
+        skipManualGuard: true,
+      });
+      if (!reset) throw new Error("无法重置棋盘");
+      manual.value = preservedManual;
+      resetPath();
+      for (const node of nodes) {
+        if (!node.mv) continue;
+        const iccs = nodeMove(node);
+        if (!iccs || !(await game.makeMove(iccs)).legal) throw new Error(`走法无法应用：${iccs ?? "未知"}`);
+      }
+      setPath(nodes);
+      return true;
+    } catch (cause) {
+      try {
+        await game.newGame(previousStartFen, {
+          preserveManual: true,
+          skipManualGuard: true,
+        });
+        for (const iccs of previousHistory) {
+          if (!(await game.replayMove(iccs)).legal) {
+            throw new Error(`无法恢复原棋局走法：${iccs}`);
+          }
+        }
+        await game.jumpTo(previousPly);
+        activeLineIds.value = previousActiveLineIds;
+        cursorDepth.value = previousCursorDepth;
+        nextNodeId.value = manual.value ? maxNodeId(manual.value.root) + 1 : 1;
+        dirty.value = previousDirty;
+      } catch (restoreCause) {
+        error.value = `${cause instanceof Error ? cause.message : String(cause)}；恢复原棋局失败：${restoreCause instanceof Error ? restoreCause.message : String(restoreCause)}`;
+        return false;
+      }
+      error.value = cause instanceof Error ? cause.message : String(cause);
+      return false;
+    }
+  }
+
+  async function applyToGame(): Promise<boolean> {
+    if (!manual.value) return false;
+    const nodes: ManualNode[] = [];
+    appendMainline(manual.value.root, nodes);
+    return applyNodes(nodes);
+  }
+
+  function pathToNode(nodeId: number): ManualNode[] | null {
+    return manual.value ? findPath(manual.value.root, nodeId) : null;
+  }
+
+  function selectPly(ply: number): boolean {
+    if (ply < 0) return false;
+    if (!manual.value) {
+      manual.value = game.history.length > 0
+        ? syncFromGame(game.startFen, game.history)
+        : createManual(game.startFen);
+      resetPath();
+    }
+
+    const node = ply === 0
+      ? manual.value.root
+      : activeLine.value[ply - 1] ?? mainlineNodes.value[ply - 1];
+    if (!node) return false;
+
+    const path = findPath(manual.value.root, node.id);
+    if (!path) return false;
+    setPath(path);
+    return true;
+  }
+
+  function confirmDiscard(): boolean {
+    return true;
+  }
+
+  function updateComment(nodeId: number, text: string): boolean {
+    let targetManual = manual.value;
+    if (!targetManual) {
+      const candidate = game.history.length > 0
+        ? syncFromGame(game.startFen, game.history)
+        : createManual(game.startFen);
+      if (!findPath(candidate.root, nodeId)) return false;
+      manual.value = candidate;
+      resetPath();
+      targetManual = candidate;
+    }
+
+    const node = lastNode(findPath(targetManual.root, nodeId) ?? []);
+    if (!node) return false;
+
+    const normalized = text.trim().length === 0 ? null : text;
+    if (node.comment === normalized) return true;
+
+    node.comment = normalized;
+    generatedPgn.value = "";
+    dirty.value = true;
+    return true;
+  }
+
+  watch(
+    () => game.currentPly,
+    (depth) => {
+      cursorDepth.value = Math.max(0, Math.min(depth, activeLineIds.value.length));
+    }
+  );
+
+  async function exportPgn() {
+    if (!manual.value && game.history.length > 0) {
+      manual.value = syncFromGame(game.startFen, game.history);
+    }
+    if (!manual.value) manual.value = createManual(game.startFen);
+    error.value = null;
+    try {
+      generatedPgn.value = await commands.manualExportPgn(manual.value);
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
+  async function save(path: string) {
+    if (!manual.value && game.history.length > 0) {
+      manual.value = syncFromGame(game.startFen, game.history);
+    }
+    if (!manual.value) return;
+    error.value = null;
+    const savedRevision = contentRevision;
+    try {
+      await unwrap(await commands.manualSave(path.trim(), manual.value));
+      if (contentRevision === savedRevision) dirty.value = false;
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
+  async function saveXqf(path: string, version = 10) {
+    if (!manual.value && game.history.length > 0) {
+      manual.value = syncFromGame(game.startFen, game.history);
+    }
+    if (!manual.value) return;
+    error.value = null;
+    const savedRevision = contentRevision;
+    try {
+      await unwrap(await commands.manualSaveXqf(path.trim(), manual.value, version));
+      if (contentRevision === savedRevision) dirty.value = false;
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
+  function clear() {
+    manual.value = null;
+    generatedPgn.value = "";
+    error.value = null;
+    dirty.value = false;
+    resetPath();
+  }
+
+  return {
+    manual,
+    generatedPgn,
+    loading,
+    error,
+    dirty,
+    hasUnsavedChanges: computed(() => dirty.value),
+    currentPath,
+    activeLine,
+    mainlineNodes,
+    currentNode,
+    nextBranches,
+    load,
+    pickFile,
+    recordMove,
+    recordHistory,
+    applyNodes,
+    applyToGame,
+    pathToNode,
+    selectPly,
+    confirmDiscard,
+    updateComment,
+    exportPgn,
+    save,
+    saveXqf,
+    clear,
+  };
+});

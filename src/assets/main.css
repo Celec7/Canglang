@@ -1,0 +1,332 @@
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 216 22% 96%;
+    --foreground: 222 24% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 24% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 24% 14%;
+    --primary: 211 100% 50%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 24% 14%;
+    --muted: 210 25% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 211 100% 96%;
+    --accent-foreground: 211 80% 36%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 24% 88%;
+    --input: 214 24% 88%;
+    --ring: 211 100% 50%;
+    --radius: 0.375rem;
+
+    --board-surface-light: #f0c985;
+    --board-surface: #dfb06a;
+    --board-surface-deep: #c88b49;
+    --board-frame: #59371f;
+    --board-line: #75502f;
+    --board-river: #8f6237;
+    --board-mark: #1683e8;
+    --board-hint: #2e9d83;
+    --board-capture: #d4524a;
+    --board-selected: rgba(46, 157, 131, 0.14);
+    --board-selection-edge: #18866f;
+    --board-last-move: #ffffff;
+    --board-check: #d12b30;
+    --board-focus: #fff7df;
+
+    /* 棋子面：暖象牙骨白（区别于棋盘木色，让棋子从棋盘跳出） */
+    --piece-face: #f6eedd;
+
+    /* 象棋阵营色语义（唯一权威，恒色，不随主题改变） */
+    --side-red: #b32632;
+    --side-black: #202326;
+    /* 阵营色在 UI 表面的可读前景变体（暗色下提亮） */
+    --side-red-fg: #b32632;
+    --side-black-fg: #202326;
+
+    /* 棋盘棋子色转发到阵营色，保持单一事实来源 */
+    --board-red: var(--side-red);
+    --board-black: var(--side-black);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 222 24% 10%;
+    --foreground: 0 0% 98%;
+    --card: 222 22% 13%;
+    --card-foreground: 0 0% 98%;
+    --popover: 222 22% 13%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 211 100% 64%;
+    --primary-foreground: 222 24% 10%;
+    --secondary: 222 18% 20%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 222 18% 18%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 211 45% 22%;
+    --accent-foreground: 211 100% 82%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 16% 27%;
+    --input: 222 16% 27%;
+    --ring: 211 100% 64%;
+    --board-surface-light: #ddb26b;
+    --board-surface: #c9904c;
+    --board-surface-deep: #a96d37;
+    --board-frame: #3b2417;
+    --board-line: #5e3c23;
+    --board-hint: #b4e06d;
+    --board-capture: #ff8475;
+    --board-selected: rgba(180, 224, 109, 0.16);
+    --board-selection-edge: #b4e06d;
+    --board-last-move: #ffffff;
+    --board-focus: #fff7df;
+
+    /* 棋子面：暗色下稍深的暖象牙 */
+    --piece-face: #d8c6a2;
+
+    /* 阵营色恒色在暗色面板上不可读，前景变体提亮以保可读性 */
+    --side-red-fg: #f2a0a8;
+    --side-black-fg: #aeb7c4;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  select,
+  input,
+  textarea {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+  }
+
+  .dark select,
+  .dark input,
+  .dark textarea {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .workspace-grid {
+    background:
+      radial-gradient(circle at 20% 0%, hsl(var(--primary) / 0.06), transparent 32rem),
+      hsl(var(--background));
+  }
+
+  .workspace-surface-bar {
+    @apply sticky bottom-0 z-10 flex w-full items-center gap-1 rounded-xl border bg-card/95 p-1.5 shadow-lg backdrop-blur-sm;
+  }
+
+  .workspace-surface-button {
+    @apply min-h-8 flex-1 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring;
+  }
+
+  .workspace-surface-button--active {
+    @apply bg-primary/10 text-primary shadow-xs;
+  }
+
+  .workspace-surface-button--close {
+    @apply flex-none px-2 text-muted-foreground;
+  }
+
+  .workspace-surface-panel {
+    @apply min-h-0 w-full overflow-hidden rounded-xl border bg-card shadow-sm;
+  }
+
+  /* 窄屏面板随内容自然撑开，滚动责任交给整个工作区。桌面三栏不使用此模式。 */
+  .workspace-surface-panel--flow {
+    height: auto !important;
+    min-height: 28rem;
+    flex: none;
+    overflow: visible;
+  }
+
+  .workspace-surface-panel--flow > .workspace-analysis-flow {
+    height: auto !important;
+    min-height: 28rem;
+    overflow: visible !important;
+  }
+
+  .workspace-analysis-flow > div:has(> [data-radix-scroll-area-viewport]) {
+    height: auto !important;
+    min-height: 0 !important;
+    flex: none !important;
+    overflow: visible !important;
+  }
+
+  .workspace-analysis-flow [data-radix-scroll-area-viewport] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .workspace-analysis-flow [data-radix-scroll-area-viewport] > div {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .workspace-surface-panel--flow > .workspace-move-list-flow {
+    height: auto !important;
+    min-height: 18rem;
+    overflow: visible !important;
+  }
+
+  .workspace-move-list-flow > div:has(> [data-radix-scroll-area-viewport]) {
+    height: auto !important;
+    min-height: 0 !important;
+    flex: none !important;
+    overflow: visible !important;
+  }
+
+  .workspace-move-list-flow [data-radix-scroll-area-viewport] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .turn-indicator {
+    @apply size-2.5 shrink-0 rounded-full ring-4;
+  }
+
+  .turn-indicator--red {
+    @apply bg-side-red-fg ring-side-red-fg/15;
+  }
+
+  .turn-indicator--black {
+    @apply bg-side-black-fg ring-side-black-fg/15;
+  }
+
+  .move-hint {
+    @apply inline-block size-2.5 shrink-0;
+  }
+
+  .move-hint--dot {
+    @apply rounded-full bg-board-hint ring-2 ring-board-hint/20;
+  }
+
+  .move-hint--corner {
+    border: 2px solid var(--board-hint);
+    border-radius: 3px;
+  }
+
+  .board-hit-target:focus {
+    outline: none;
+  }
+
+  .board-hit-target:focus-visible {
+    outline: none;
+  }
+
+  .toast-enter-active,
+  .toast-leave-active {
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+
+  .toast-enter-from,
+  .toast-leave-to {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+
+  /* Radix Dialog & Tooltip Keyframes & Transitions */
+  @keyframes dialog-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes dialog-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  @keyframes dialog-zoom-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes dialog-zoom-out {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+
+  @keyframes tooltip-fade-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .dialog-overlay[data-state="open"] {
+    animation: dialog-fade-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .dialog-overlay[data-state="closed"] {
+    animation: dialog-fade-out 140ms ease-in forwards;
+  }
+
+  .dialog-content[data-state="open"] {
+    animation: dialog-zoom-in 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .dialog-content[data-state="closed"] {
+    animation: dialog-zoom-out 140ms ease-in forwards;
+  }
+
+  .tooltip-content[data-state="delayed-open"],
+  .tooltip-content[data-state="instant-open"] {
+    animation: tooltip-fade-in 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* 高对比度键盘焦点指示 (WCAG 2.1 AA Compliant Focus Rings) */
+  :focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  /* 系统级减弱动效响应 (Prefers-Reduced-Motion) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

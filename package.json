@@ -1,0 +1,41 @@
+{
+  "name": "canglang-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/frontend/*.test.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "package": "pnpm build && pnpm exec tauri build",
+    "release": "node scripts/release.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.42.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-opener": "^2.5.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "pinia": "^4.0.3",
+    "radix-vue": "^1.9.17",
+    "tailwind-merge": "^3.6.0",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^26.4.1",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "autoprefixer": "^10.5.5",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  }
+}

@@ -1,0 +1,33 @@
+[package]
+name = "canglang-app"
+version = "0.1.0"
+edition = "2024"
+description = "Canglang Chinese Chess Desktop Application"
+license = "MIT"
+
+[lib]
+name = "canglang_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "canglang-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0"
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+encoding_rs = "0.8"
+rfd = "0.17"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "query"] }
+sevenz-rust = "0.6"
+tauri = { version = "2", features = ["specta"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive", "function"] }
+tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+specta-typescript = "0.0.12"
+tauri-plugin-opener = "2.5.5"

@@ -1,0 +1,5 @@
+# pnpm 11 设置（从本文件读取）。允许默认被跳过的构建脚本，使 esbuild / vue-demi
+# 初始化平台二进制与 Vue 版本切换。
+allowBuilds:
+  esbuild: true
+  vue-demi: true

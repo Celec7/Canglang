@@ -1,0 +1,28 @@
+# Beyond-code process files
+.beyond-code/
+
+# Cargo / Rust
+target/
+src-tauri/target/
+.cargo-home/
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# pnpm / npm dependency caches (local workspace store to avoid read-only npm cache)
+.pnpm-store/
+.npm-cache/
+.pnpm-cache/
+
+# Agent skill installs / tooling (not project source)
+.agents/
+skills-lock.json
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.log
