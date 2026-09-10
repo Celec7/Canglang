@@ -11,6 +11,8 @@ pub mod repetition;
 /// 具体实现按攻击检测、候选走法生成和完整合法性判定拆分在内部模块中
 pub struct MoveValidator;
 
+pub(crate) use legality::{GeometryPolicy, can_piece_move_geometry};
+
 pub use adjudicator::{RuleAssessment, RuleExplanation, RuleExplanationCode, RuleStatus};
 pub use effects::MoveEffect;
 pub use profile::RuleProfile;
