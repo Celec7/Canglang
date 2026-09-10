@@ -4,5 +4,5 @@
 
 ### 📋 其他变更 (Other Changes)
 
-- First public release
+- Public release
 <!-- 由 git-cliff 自动生成 -->
