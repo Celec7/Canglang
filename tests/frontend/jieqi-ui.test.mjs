@@ -142,7 +142,7 @@ test("送将候选保持高亮并在尝试落子时通过 toast 说明不可走"
   commands.sessionTargets = async () => ok(["a0b0"]);
   commands.sessionMove = async () => ({
     status: "error",
-    error: { code: "illegal_move", message: "该走法会导致送将，不能走" },
+    error: { code: "illegal_move", message: "不能送将，请选择其他位置" },
   });
   const game = useGameStore();
   await game.init();
@@ -152,7 +152,7 @@ test("送将候选保持高亮并在尝试落子时通过 toast 说明不可走"
   assert.deepEqual(interaction.candidateTargets.value, [[9, 1]]);
   await interaction.onSquareClick(9, 1);
 
-  assert.equal(useToast().messages.value.at(-1)?.message, "该走法会导致送将，不能走");
+  assert.equal(useToast().messages.value.at(-1)?.message, "不能送将，请选择其他位置");
   assert.deepEqual(interaction.selected.value, [9, 0]);
 });
 

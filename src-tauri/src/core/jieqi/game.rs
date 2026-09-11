@@ -116,7 +116,7 @@ pub enum JieqiGameError {
     OperationUnavailable(JieqiCapabilityReason),
     #[error("揭棋走法不合法")]
     IllegalMove,
-    #[error("该走法会导致送将，不能走")]
+    #[error("不能送将，请选择其他位置")]
     ExposesKing,
     #[error("走方参数与当前走方不一致")]
     WrongSide,

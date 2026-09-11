@@ -76,14 +76,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
 
   async function commitMove(from: Coord, to: Coord) {
     try {
-      const result = await game.makeMove(coordsToIccs(from, to));
-      if (result.legal) {
-        selected.value = null;
-        candidateTargets.value = [];
-        return;
-      }
-
-      show(inCheck.value ? "请应将" : "不可送将");
+      await game.makeMove(coordsToIccs(from, to));
       selected.value = null;
       candidateTargets.value = [];
     } catch (cause) {
@@ -121,13 +114,6 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     const isCandidateTarget = candidateTargets.value.some((target) => sameCoord(target, coord));
     const from = selected.value;
     if (isCandidateTarget) {
-      await submit(from, coord);
-      return;
-    }
-
-    // 让 Rust 继续作为尝试走法的权威来源，不根据结果推断其它棋规
-    // 此分支只在当前局面被将军时提供必要说明
-    if (inCheck.value) {
       await submit(from, coord);
       return;
     }

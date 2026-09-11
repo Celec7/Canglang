@@ -32,7 +32,7 @@ summary: 规定 Rust Tauri 命令、引擎事件和前端生成绑定之间的�
 
 `sessionNew` 以 `NewGameOptions` 选择普通象棋或揭棋。`SessionSnapshot.position` 与 `start_position` 是带标签的 `PositionView`：普通象棋携带 FEN，揭棋携带 `JieqiPositionViewV1`。`history` 对应 `SessionPly::Xiangqi(PlyRecord)` 或 `SessionPly::Jieqi(PublicPly)`；`capabilities` 是操作可用性的事实来源，禁用项同时给出原因。揭棋求和使用带 ID 的待回应请求，回应方、取消方和过期 ID 均由 Rust 校验。
 
-`sessionTargets` 返回棋盘交互用的几何候选，而不是落子授权。普通象棋与揭棋都保留可能导致送将的候选位置；`sessionMove` 再执行完整王安全校验。揭棋送将返回 `illegal_move` 和明确中文说明，前端通过全局 toast 呈现，对局状态与暗子身份保持不变。
+`sessionTargets` 返回棋盘交互用的几何候选，而不是落子授权。普通象棋与揭棋都保留可能导致送将的候选位置；`sessionMove` 再执行完整王安全校验。两种棋局送将均返回 `illegal_move` 和统一说明“不能送将，请选择其他位置”，前端通过全局 toast 呈现，对局状态与暗子身份保持不变。
 
 ### Engine
 

@@ -43,7 +43,7 @@ Store 经 `src/lib/ipc.ts` 调用命令。`GameStore` 用 `SessionSnapshot` 覆�
 
 `App.vue` 组合 `AppToolbar`、`ChessBoard`、`BoardControls`、`AnalysisWorkspace`/`JieqiInfoPanel`、`MoveList`、`ReplayControls` 与全局 Dialog。面板与按钮用 `src/components/ui` 的 Button、Card、Tabs、Badge 等组件。新增 UI 前先复用已有组件与语义颜色。
 
-棋盘负责 SVG 绘制与点击目标，`useBoard` 负责交互状态，Rust 负责最终合法性判断。目标高亮展示符合移动几何的候选位置，揭棋不会提前隐藏可能送将的候选；用户尝试该位置时由 Rust 拒绝，现有全局 toast 显示“该走法会导致送将，不能走”。引擎分析输出由 `MultiPvList` 展示，点击 PV 后由 Rust 纯预览快照驱动棋盘渲染，明确应用才写入 `GameStore`。`BookTable` 展示 Rust 返回的开局库候选。`SettingsView` 只提供 Dialog 外壳与导航，领域内容位于 `components/settings/*`，引擎档案管理与内置引擎在线获取由 `useEngineSettings` 协调。设置页中的 selected Profile 只是待编辑项，只有“保存并应用当前引擎”成功后才更新 `activeEngineId`；Profile 到 `EngineConfig` 的转换集中在 `src/lib/engine-profile.ts`。
+棋盘负责 SVG 绘制与点击目标，`useBoard` 负责交互状态，Rust 负责最终合法性判断。目标高亮展示符合移动几何的候选位置，揭棋不会提前隐藏可能送将的候选；普通象棋或揭棋尝试该位置时均由 Rust 拒绝，现有全局 toast 统一显示“不能送将，请选择其他位置”。引擎分析输出由 `MultiPvList` 展示，点击 PV 后由 Rust 纯预览快照驱动棋盘渲染，明确应用才写入 `GameStore`。`BookTable` 展示 Rust 返回的开局库候选。`SettingsView` 只提供 Dialog 外壳与导航，领域内容位于 `components/settings/*`，引擎档案管理与内置引擎在线获取由 `useEngineSettings` 协调。设置页中的 selected Profile 只是待编辑项，只有“保存并应用当前引擎”成功后才更新 `activeEngineId`；Profile 到 `EngineConfig` 的转换集中在 `src/lib/engine-profile.ts`。
 
 普通走子或应用 PV 成功后，`GameStore` 将后端快照中游标以内的历史交给 `ManualStore.recordHistory`，同步普通棋谱树。清空棋谱后继续走子同样恢复完整的当前历史。已有节点、备注与分支保留，新节点使棋谱进入待保存状态并使旧导出文本失效；后端拒绝整条 PV 时不更新棋谱。揭棋走子不建立 `ChessManual` 或伪造 FEN；`ManualStore` 只保存一份公开元数据和 `ply → 备注`，训练改走截断主线时同步删除越界备注。
 

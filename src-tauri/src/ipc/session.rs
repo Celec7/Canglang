@@ -12,6 +12,8 @@ use crate::services::jieqi_setup::create_random_jieqi_position;
 use std::sync::Mutex;
 use tauri::State;
 
+const SELF_CHECK_MESSAGE: &str = "不能送将，请选择其他位置";
+
 #[tauri::command]
 #[specta::specta]
 pub fn session_get(state: State<'_, Mutex<GameState>>) -> SessionSnapshot {
@@ -84,24 +86,32 @@ pub fn session_move(
         .lock()
         .unwrap()
         .mutate(&token, SessionMutation::Content, |active| match active {
-            ActiveGame::Xiangqi(game) => {
-                if game.result() != GameResult::Ongoing {
-                    return Err(SessionError::new(
-                        SessionErrorCode::GameFinished,
-                        "对局已经结束",
-                    ));
-                }
-                if game.make_move(mv) {
-                    Ok(())
-                } else {
-                    Err(SessionError::new(
-                        SessionErrorCode::IllegalMove,
-                        "走法不合法",
-                    ))
-                }
-            }
+            ActiveGame::Xiangqi(game) => apply_xiangqi_move(game, mv),
             ActiveGame::Jieqi(game) => game.make_move(mv).map(|_| ()).map_err(map_jieqi),
         })
+}
+
+fn apply_xiangqi_move(game: &mut XiangqiGame, mv: Move) -> Result<(), SessionError> {
+    if game.result() != GameResult::Ongoing {
+        return Err(SessionError::new(
+            SessionErrorCode::GameFinished,
+            "对局已经结束",
+        ));
+    }
+    let is_candidate = MoveValidator::get_candidate_moves(&game.current_board(), mv.from)
+        .into_iter()
+        .any(|candidate| candidate == mv);
+    if game.make_move(mv) {
+        return Ok(());
+    }
+    Err(SessionError::new(
+        SessionErrorCode::IllegalMove,
+        if is_candidate {
+            SELF_CHECK_MESSAGE
+        } else {
+            "走法不合法"
+        },
+    ))
 }
 
 #[tauri::command]
@@ -299,6 +309,23 @@ mod tests {
         let error = map_jieqi(JieqiGameError::ExposesKing);
 
         assert_eq!(error.code, SessionErrorCode::IllegalMove);
-        assert_eq!(error.message, "该走法会导致送将，不能走");
+        assert_eq!(error.message, SELF_CHECK_MESSAGE);
+    }
+
+    #[test]
+    fn xiangqi_self_check_uses_the_same_feedback() {
+        let board = BoardState::from_fen("3kr4/9/9/9/9/4R4/9/9/9/4K4 w").unwrap();
+        let mut game = XiangqiGame::new(board);
+        let before = game.current_board();
+
+        let error = apply_xiangqi_move(
+            &mut game,
+            Move::new(Position::new(5, 4), Position::new(5, 5)),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code, SessionErrorCode::IllegalMove);
+        assert_eq!(error.message, SELF_CHECK_MESSAGE);
+        assert_eq!(game.current_board(), before);
     }
 }
