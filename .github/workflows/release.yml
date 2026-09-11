@@ -40,7 +40,8 @@ jobs:
       tag: ${{ steps.resolve-tag.outputs.tag }}
       version: ${{ steps.resolve-tag.outputs.version }}
       draft: ${{ steps.resolve-tag.outputs.draft }}
-      release_notes: ${{ steps.read-notes.outputs.notes }}
+      release_id: ${{ steps.create-release.outputs.release_id }}
+      release_draft: ${{ steps.create-release.outputs.release_draft }}
 
     steps:
       - name: Checkout repository (fetch full history for changelog)
@@ -120,8 +121,38 @@ jobs:
             cat RELEASE_NOTES.md >> "$GITHUB_OUTPUT"
             echo "EOF" >> "$GITHUB_OUTPUT"
           else
+            echo "本次发布包含稳定性改进与日常优化。" > RELEASE_NOTES.md
             echo "notes=本次发布包含稳定性改进与日常优化。" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Create or reuse draft release
+        id: create-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.resolve-tag.outputs.tag }}
+        run: |
+          if release_id="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId --jq '.databaseId' 2>/dev/null)"; then
+            release_draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+            echo "复用已有 Release: $RELEASE_TAG"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --title "Canglang $RELEASE_TAG" \
+              --notes-file RELEASE_NOTES.md
+            release_id="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json databaseId --jq '.databaseId')"
+            release_draft=true
+            echo "已创建 Draft Release: $RELEASE_TAG"
+          fi
+
+          if [ -z "$release_id" ]; then
+            echo "未能解析 Release ID: $RELEASE_TAG"
+            exit 1
+          fi
+
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "release_draft=$release_draft" >> "$GITHUB_OUTPUT"
 
       - name: Upload Release Notes artifact
         uses: actions/upload-artifact@v7
@@ -193,11 +224,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
           tagName: ${{ needs.prepare.outputs.tag }}
-          releaseName: "Canglang ${{ needs.prepare.outputs.tag }}"
-          releaseBody: ${{ needs.prepare.outputs.release_notes }}
-          releaseDraft: ${{ needs.prepare.outputs.draft == 'true' }}
-          prerelease: false
+          releaseDraft: ${{ needs.prepare.outputs.release_draft == 'true' }}
+          releaseAssetNamePattern: "Canglang-v[version]-[platform]-[arch][setup][ext]"
           args: ${{ matrix.args }}
 
       - name: Build & upload Linux native executable
@@ -206,7 +236,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm exec tauri build --no-bundle
-          native_binary="Canglang-${{ needs.prepare.outputs.tag }}-linux-x86_64"
+          native_binary="Canglang-v${{ needs.prepare.outputs.version }}-linux-amd64"
           install -m 0755 target/release/canglang-app "$native_binary"
           gh release upload "${{ needs.prepare.outputs.tag }}" "$native_binary" --clobber
 
@@ -217,6 +247,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "${{ needs.prepare.outputs.tag }}"
+          $version = "${{ needs.prepare.outputs.version }}"
           $exe = (Get-ChildItem -Path "target" -Filter "canglang-app.exe" -Recurse | Where-Object { $_.FullName -like "*release*" } | Select-Object -First 1).FullName
           if (-not $exe -or -not (Test-Path $exe)) {
             throw "未在 target 目录下找到编译生成的 canglang-app.exe"
@@ -226,7 +257,21 @@ jobs:
           New-Item -ItemType Directory -Force -Path $portableDir
           Copy-Item $exe -Destination "$portableDir/Canglang.exe"
           New-Item -ItemType File -Path "$portableDir/.portable" -Force
-          $zipName = "Canglang-$tag-windows-x64-portable.zip"
+          $zipName = "Canglang-v$version-windows-x64-portable.zip"
           Compress-Archive -Path "$portableDir/*" -DestinationPath $zipName -Force
           Write-Host "Uploading $zipName to release $tag..."
           gh release upload $tag $zipName --clobber
+
+  finalize-release:
+    needs: [prepare, publish-matrix]
+    if: ${{ success() && needs.prepare.outputs.draft != 'true' && needs.prepare.outputs.release_draft == 'true' }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Publish completed release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

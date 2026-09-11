@@ -78,6 +78,6 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v7
         with:
-          name: Canglang-linux-x86_64
+          name: Canglang-linux-amd64
           path: target/release/Canglang
           if-no-files-found: error
