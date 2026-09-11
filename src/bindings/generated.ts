@@ -98,8 +98,12 @@ export const commands = {
 	engineRemoveBuiltin: (profileId: string) => typedError<EngineProfile, string>(__TAURI_INVOKE("engine_remove_builtin", { profileId })),
 	/**  从磁盘加载并解析棋谱（`.xqf`/`.pgn`） */
 	manualLoad: (path: string) => typedError<ChessManual, string>(__TAURI_INVOKE("manual_load", { path })),
-	/**  弹出棋谱文件选择器；`open` 选择已有 PGN/XQF，`save` 选择输出文件路径 */
+	/**  弹出棋谱文件选择器；普通棋谱与揭棋文档使用互不混淆的 action */
 	manualPickFile: (action: string) => typedError<string | null, string>(__TAURI_INVOKE("manual_pick_file", { action })),
+	/**  保存揭棋文档；完整身份从锁内克隆的 Rust 对局直接进入文件服务 */
+	jieqiDocumentSave: (token: SessionToken, path: string, kind: JieqiDocumentKind, metadata: JieqiDocumentMetadata, annotations: { [key in number]: string }, editRevision: string) => typedError<JieqiDocumentReceipt, SessionError>(__TAURI_INVOKE("jieqi_document_save", { token, path, kind, metadata, annotations, editRevision })),
+	/**  打开揭棋文档；文件在锁外完整解析，提交候选时统一停止引擎并复核 token */
+	jieqiDocumentOpen: (token: SessionToken, path: string) => typedError<JieqiDocumentOpenResult, SessionError>(__TAURI_INVOKE("jieqi_document_open", { token, path })),
 	/**  解析文本棋谱；文件格式和字节编码仍由 `ManualService` 负责 */
 	manualParseText: (format: string, text: string) => typedError<ChessManual, string>(__TAURI_INVOKE("manual_parse_text", { format, text })),
 	/**  将棋谱保存为 `.pgn` 到磁盘 */
@@ -376,6 +380,34 @@ export type JieqiCapability = {
 };
 
 export type JieqiCapabilityReason = "wrong_variant" | "read_only" | "duel_policy" | "finished" | "not_at_head" | "pending_draw" | "no_history" | "no_future";
+
+export type JieqiDocumentKind = "private_game" | "public_replay";
+
+export type JieqiDocumentMetadata = {
+	title: string,
+	date: string,
+	red_player: string,
+	black_player: string,
+	event_name: string,
+};
+
+export type JieqiDocumentOpenResult = {
+	snapshot: SessionSnapshot,
+	document: JieqiDocumentPublic,
+};
+
+export type JieqiDocumentPublic = {
+	kind: JieqiDocumentKind,
+	metadata: JieqiDocumentMetadata,
+	annotations: { [key in number]: string },
+};
+
+export type JieqiDocumentReceipt = {
+	game_id: string,
+	content_revision: string,
+	edit_revision: string,
+	kind: JieqiDocumentKind,
+};
 
 export type JieqiPieceView = { state: "hidden"; position: Position; color: Color; move_as: JieqiPublicKind } | { state: "revealed"; position: Position; color: Color; kind: JieqiPublicKind };
 

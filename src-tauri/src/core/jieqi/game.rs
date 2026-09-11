@@ -153,9 +153,13 @@ impl JieqiGame {
     }
 
     pub fn new_public_replay(initial: JieqiPosition) -> Self {
+        Self::new_public_replay_with_mode(initial, JieqiPlayMode::Duel)
+    }
+
+    pub fn new_public_replay_with_mode(initial: JieqiPosition, play_mode: JieqiPlayMode) -> Self {
         Self {
             history: JieqiHistory::new(initial),
-            play_mode: JieqiPlayMode::Duel,
+            play_mode,
             source: JieqiSource::PublicReplay,
             final_result: None,
             draw_offer: None,
@@ -201,6 +205,24 @@ impl JieqiGame {
 
     pub fn draw_offer(&self) -> Option<&DrawOffer> {
         self.draw_offer.as_ref()
+    }
+
+    pub const fn final_result(&self) -> Option<JieqiGameResult> {
+        self.final_result
+    }
+
+    pub fn restore_document_result(
+        &mut self,
+        result: JieqiGameResult,
+    ) -> Result<(), JieqiGameError> {
+        if self.final_result.is_some() || self.current_ply() != self.head_ply() {
+            return Err(JieqiGameError::OperationUnavailable(
+                JieqiCapabilityReason::Finished,
+            ));
+        }
+        self.final_result = Some(result);
+        self.history.results[self.history.cursor] = Some(result);
+        Ok(())
     }
 
     pub fn capability(&self, operation: JieqiOperation) -> JieqiCapability {
@@ -303,6 +325,28 @@ impl JieqiGame {
         let mv = Move::from_iccs(&expected.iccs).map_err(|_| JieqiGameError::IllegalMove)?;
         let (next, result, actual) = self.prepare_move(mv)?;
         if actual != expected {
+            return Err(JieqiGameError::RecordedPlyMismatch);
+        }
+        self.history.push(next, result, actual);
+        if result.is_some() {
+            self.final_result = result;
+        }
+        Ok(())
+    }
+
+    pub fn apply_recorded_evidence(
+        &mut self,
+        iccs: &str,
+        revealed: Option<JieqiPublicKind>,
+    ) -> Result<(), JieqiGameError> {
+        if self.source != JieqiSource::PublicReplay || self.current_ply() != self.head_ply() {
+            return Err(JieqiGameError::OperationUnavailable(
+                JieqiCapabilityReason::ReadOnly,
+            ));
+        }
+        let mv = Move::from_iccs(iccs).map_err(|_| JieqiGameError::IllegalMove)?;
+        let (next, result, actual) = self.prepare_move(mv)?;
+        if actual.revealed != revealed {
             return Err(JieqiGameError::RecordedPlyMismatch);
         }
         self.history.push(next, result, actual);

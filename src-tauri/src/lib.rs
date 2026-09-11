@@ -90,6 +90,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         ipc::engine::engine_remove_builtin,
         ipc::manual::manual_load,
         ipc::manual::manual_pick_file,
+        ipc::manual::jieqi_document_save,
+        ipc::manual::jieqi_document_open,
         ipc::manual::manual_parse_text,
         ipc::manual::manual_save,
         ipc::manual::manual_save_xqf,

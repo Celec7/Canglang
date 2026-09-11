@@ -1,5 +1,6 @@
 pub mod encoding;
 pub mod error;
+pub mod jieqi;
 pub mod models;
 pub mod pgn_exporter;
 pub mod pgn_parser;

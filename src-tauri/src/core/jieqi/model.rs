@@ -109,6 +109,24 @@ impl JieqiPosition {
         )
     }
 
+    pub fn standard_recorded(reveals: Vec<JieqiReveal>) -> Result<Self, JieqiError> {
+        let pieces = STANDARD_INITIAL_SLOTS
+            .iter()
+            .map(|slot| JieqiPiece {
+                id: slot.id,
+                color: slot.color,
+                move_as: slot.move_as,
+                position: slot.position,
+                revealed: slot.move_as == PieceKind::King,
+            })
+            .collect();
+        Self::from_parts(
+            pieces,
+            JieqiIdentitySource::RecordedReveals(reveals),
+            Color::Red,
+        )
+    }
+
     pub fn from_parts(
         pieces: Vec<JieqiPiece>,
         identities: JieqiIdentitySource,
@@ -256,6 +274,36 @@ fn validate_reveals(reveals: &[JieqiReveal]) -> Result<(), JieqiError> {
         }
         if !ids.insert(reveal.piece_id) {
             return Err(JieqiError::DuplicateRevealId(reveal.piece_id));
+        }
+    }
+    for color in [Color::Red, Color::Black] {
+        for kind in [
+            PieceKind::Advisor,
+            PieceKind::Bishop,
+            PieceKind::Knight,
+            PieceKind::Rook,
+            PieceKind::Cannon,
+            PieceKind::Pawn,
+        ] {
+            let available = STANDARD_INITIAL_SLOTS
+                .iter()
+                .filter(|slot| slot.color == color && slot.move_as == kind)
+                .count();
+            let actual = reveals
+                .iter()
+                .filter(|reveal| {
+                    STANDARD_INITIAL_SLOTS[reveal.piece_id as usize].color == color
+                        && reveal.kind == kind
+                })
+                .count();
+            if actual > available {
+                return Err(JieqiError::InvalidIdentityMultiset {
+                    color,
+                    kind,
+                    expected: available,
+                    actual,
+                });
+            }
         }
     }
     Ok(())

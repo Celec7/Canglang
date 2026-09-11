@@ -32,9 +32,13 @@ summary: 规定 Rust Tauri 命令、引擎事件和前端生成绑定之间的�
 
 ### Manual
 
-`manualLoad`、`manualPickFile`、`manualParseText`、`manualSave`、`manualSaveXqf` 和 `manualExportPgn`。
+`manualLoad`、`manualPickFile`、`manualParseText`、`manualSave`、`manualSaveXqf`、`manualExportPgn`、`jieqiDocumentSave` 和 `jieqiDocumentOpen`。
 
-棋谱路径与 `ChessManual` 在边界传递，解析与导出在 Rust 完成。`manualPickFile(action)` 由 Rust 弹出原生文件选择器，`action` 为 `open` 时过滤 `.pgn/.xqf`，为 `save` 时返回用户选择的输出路径。`ChessManual.root` 及其后代节点的 `comment` 是可选多行纯文本：根节点表示起始局面说明，普通节点表示走完对应着法后的说明；备注编辑不新增 `GameSnapshot` 字段，也不新增实时事件。`manualSaveXqf(path, manual, version)` 当前只接受版本 `10`，生成未加密 canonical XQF；多分支棋谱和无法用 GBK 表示的文本返回错误。前端不得解析 PGN/XQF 或自行处理编码和转义。
+棋谱路径与 `ChessManual` 在边界传递，解析与导出在 Rust 完成。`manualPickFile(action)` 由 Rust 弹出原生文件选择器：`open`/`save` 保持普通 `.pgn/.xqf` 契约，`open_jieqi`、`save_jieqi_private`、`save_jieqi_public` 使用 `.cjq` 过滤器。`ChessManual.root` 及其后代节点的 `comment` 是可选多行纯文本：根节点表示起始局面说明，普通节点表示走完对应着法后的说明；备注编辑不新增对局快照字段，也不新增实时事件。`manualSaveXqf(path, manual, version)` 当前只接受版本 `10`，生成未加密 canonical XQF；多分支棋谱和无法用 GBK 表示的文本返回错误。前端不得解析 PGN、XQF 或 `.cjq`，也不得自行处理编码和转义。
+
+`jieqiDocumentSave(token, path, kind, metadata, annotations, editRevision)` 只接受揭棋会话。后端在持锁期间校验版本 token、能力并克隆不可变对局事实，随后在锁外原子写入；回执原样携带所导出的 `gameId`、`contentRevision`、`editRevision` 与 `kind`，供前端判定保存结果是否仍然新鲜。`private_game` 的固定身份不会出现在参数或回执中。
+
+`jieqiDocumentOpen(token, path)` 在锁外检查大小、解析并完整重放候选文档，成功后通过统一会话生命周期协调器停止旧引擎、再次检查 token 并替换对局。返回值只含 `SessionSnapshot` 和公开元数据/备注，永不返回 Assigned 身份；失败或过期不修改当前会话。
 
 ### Book
 
