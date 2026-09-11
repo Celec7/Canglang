@@ -1,6 +1,6 @@
 [package]
 name = "canglang-app"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Canglang Chinese Chess Desktop Application"
 license = "MIT"
