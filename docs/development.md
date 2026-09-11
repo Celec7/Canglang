@@ -70,7 +70,7 @@ Vite 根目录是仓库根目录，源码入口 `src/main.ts`，输出目录 `di
 
 - **本地命令发版**：运行 `pnpm release [patch|minor|major|<版本号>]`。脚本自动同步版本配置、更新 `Cargo.lock`、根据 Conventional Commits 生成 `CHANGELOG.md`、提交 Git 并创建 `v*` 标签。执行 `git push && git push origin <tag>` 即可触发远端自动化打包。使用 `--dry-run` 预览变更。
 - **GitHub 网页一键发版**：在 GitHub Actions 的 `release` 工作流选择升级级别（或输入指定版本号）直接触发。工作流自动更新版本、打标签、提取 Release Notes、执行跨平台矩阵打包，并上传发布。
-- **分发产物与便携版**：全平台对外分发产物统一命名为 `Canglang`；Windows 发布流水线除标准安装包外，自动将可执行文件与 `.portable` 标记打包为 `Canglang-v*-windows-x64-portable.zip` 免安装便携版。
+- **分发产物与便携版**：全平台对外分发产物统一命名为 `Canglang`；Linux 发布流水线除 `deb` 和 AppImage 外，还上传 `Canglang-v*-linux-x86_64` 原生单二进制，可直接运行以避开 AppImage 的运行开销，但依赖目标系统提供 GTK/WebKit 等运行库；Windows 发布流水线除标准安装包外，自动将可执行文件与 `.portable` 标记打包为 `Canglang-v*-windows-x64-portable.zip` 免安装便携版。
 
 ## 工作流
 

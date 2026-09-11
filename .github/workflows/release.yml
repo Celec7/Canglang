@@ -200,6 +200,16 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: Build & upload Linux native executable
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm exec tauri build --no-bundle
+          native_binary="Canglang-${{ needs.prepare.outputs.tag }}-linux-x86_64"
+          install -m 0755 target/release/canglang-app "$native_binary"
+          gh release upload "${{ needs.prepare.outputs.tag }}" "$native_binary" --clobber
+
       - name: Package & upload Windows Portable zip
         if: matrix.platform == 'windows-latest'
         shell: pwsh
