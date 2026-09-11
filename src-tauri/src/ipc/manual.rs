@@ -44,6 +44,13 @@ pub async fn manual_pick_file(action: String) -> Result<Option<String>, AppError
                 .save_file()
                 .await
         }
+        "save_xqf" => {
+            rfd::AsyncFileDialog::new()
+                .add_filter("XQF v10 棋谱", &["xqf"])
+                .set_title("保存 XQF v10 棋谱")
+                .save_file()
+                .await
+        }
         "open_jieqi" => {
             rfd::AsyncFileDialog::new()
                 .add_filter("揭棋文档", &["cjq"])

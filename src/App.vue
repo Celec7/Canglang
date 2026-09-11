@@ -22,6 +22,7 @@ import ManualFileDialog from "./components/dialogs/ManualFileDialog.vue";
 import ShortcutsDialog from "./components/dialogs/ShortcutsDialog.vue";
 import NewGameDialog from "./components/dialogs/NewGameDialog.vue";
 import DrawOfferDialog from "./components/dialogs/DrawOfferDialog.vue";
+import UnsavedChangesDialog from "./components/dialogs/UnsavedChangesDialog.vue";
 import { useGameStore } from "./stores/game";
 import { usePreferencesStore } from "./stores/preferences";
 import { useAppLifecycle } from "@/composables/useAppLifecycle";
@@ -182,6 +183,7 @@ function closeSurfaceAndRestoreFocus() {
       <ShortcutsDialog v-model:open="shortcutsOpen" />
       <NewGameDialog v-model:open="newGameOpen" />
       <DrawOfferDialog />
+      <UnsavedChangesDialog />
 
       <!-- 无障碍实时语音广播通道（屏幕阅读器实时区域） -->
       <div class="sr-only" aria-live="polite" aria-atomic="true">

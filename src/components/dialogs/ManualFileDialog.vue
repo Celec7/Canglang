@@ -14,32 +14,31 @@ import {
 } from "@/components/ui";
 import { FolderOpen } from "@lucide/vue";
 import { useManualStore } from "@/stores/manual";
+import { useGameStore } from "@/stores/game";
 import { useToast } from "@/composables/useToast";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (e: "update:open", value: boolean): void }>();
 
 const manual = useManualStore();
+const game = useGameStore();
 const { show } = useToast();
 
 const loadPath = ref("");
 const savePath = ref("");
 const xqfSavePath = ref("");
+const jieqiLoadPath = ref("");
+const jieqiSavePath = ref("");
+const jieqiPublicPath = ref("");
 
 async function loadFile() {
   if (!loadPath.value.trim()) return;
-  if (!manual.confirmDiscard()) return;
-  await manual.load(loadPath.value.trim());
-  if (manual.error) {
-    show(`载入棋谱失败: ${manual.error}`);
-  } else {
-    const applied = await manual.applyToGame();
-    if (!applied) {
-      show(`载入主线失败: ${manual.error ?? "棋谱中包含无法应用的走法"}`);
-      return;
-    }
+  if (!(await manual.confirmDiscard())) return;
+  if (await manual.openXiangqi(loadPath.value.trim())) {
     show("棋谱已成功载入");
     emit("update:open", false);
+  } else {
+    show(`载入棋谱失败: ${manual.error ?? "棋谱中包含无法应用的走法"}`);
   }
 }
 
@@ -59,8 +58,8 @@ async function applyLoadedManual() {
   }
 }
 
-function clearManual() {
-  if (!manual.confirmDiscard()) return;
+async function clearManual() {
+  if (!(await manual.confirmDiscard())) return;
   manual.clear();
 }
 
@@ -104,10 +103,54 @@ async function saveXqfFile() {
 
 async function pickXqfSaveFile() {
   try {
-    const path = await manual.pickFile("save");
+    const path = await manual.pickFile("save_xqf");
     if (path) xqfSavePath.value = path.endsWith(".xqf") ? path : `${path}.xqf`;
   } catch (cause) {
     show(`选择 XQF 保存位置失败: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
+async function pickJieqiLoadFile() {
+  try {
+    const path = await manual.pickFile("open_jieqi");
+    if (path) jieqiLoadPath.value = path;
+  } catch (cause) {
+    show(`选择揭棋文档失败: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
+async function loadJieqiFile() {
+  if (!jieqiLoadPath.value.trim() || !(await manual.confirmDiscard())) return;
+  if (await manual.openJieqi(jieqiLoadPath.value.trim())) {
+    show("揭棋文档已成功载入");
+    emit("update:open", false);
+  } else {
+    show(`载入揭棋文档失败: ${manual.error ?? "未知错误"}`);
+  }
+}
+
+async function pickJieqiSaveFile(kind: "private_game" | "public_replay") {
+  try {
+    const path = await manual.pickFile(kind === "private_game" ? "save_jieqi_private" : "save_jieqi_public");
+    if (!path) return;
+    const normalized = path.endsWith(".cjq") ? path : `${path}.cjq`;
+    if (kind === "private_game") jieqiSavePath.value = normalized;
+    else jieqiPublicPath.value = normalized;
+  } catch (cause) {
+    show(`选择揭棋保存位置失败: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
+async function saveJieqi(kind: "private_game" | "public_replay") {
+  const path = kind === "private_game" ? jieqiSavePath.value : jieqiPublicPath.value;
+  if (!path.trim()) return;
+  const succeeded = await manual.saveJieqi(path.trim(), kind);
+  if (!succeeded) {
+    show(`保存揭棋文档失败: ${manual.error ?? "未知错误"}`);
+  } else if (kind === "private_game") {
+    show("私有续局已保存；文件包含未揭身份，请勿公开分享");
+  } else {
+    show("公开回放已导出；文件不包含未揭身份");
   }
 }
 </script>
@@ -116,11 +159,13 @@ async function pickXqfSaveFile() {
   <Dialog :open="props.open" @update:open="emit('update:open', $event)">
     <DialogContent class="max-w-lg">
       <DialogHeader>
-        <DialogTitle>棋谱导入与导出 (PGN / XQF)</DialogTitle>
-        <DialogDescription>载入本地棋谱，或将当前对局保存为 PGN 与规范化 XQF v10。</DialogDescription>
+        <DialogTitle>{{ game.variant === "jieqi" ? "揭棋文档" : "棋谱导入与导出 (PGN / XQF)" }}</DialogTitle>
+        <DialogDescription>
+          {{ game.variant === "jieqi" ? "打开 .cjq，保存可续局私有文件，或导出不含未揭身份的公开回放。" : "载入本地棋谱，或将当前对局保存为 PGN 与规范化 XQF v10。" }}
+        </DialogDescription>
       </DialogHeader>
 
-      <div class="flex flex-col gap-4 py-2 text-xs">
+      <div v-if="game.variant !== 'jieqi'" class="flex flex-col gap-4 py-2 text-xs">
         <!-- 载入本地棋谱 -->
         <div class="flex flex-col gap-1.5">
           <label class="font-medium text-foreground">打开棋谱文件 (.pgn / .xqf)</label>
@@ -130,6 +175,15 @@ async function pickXqfSaveFile() {
             <Button size="sm" :disabled="manual.loading" @click="loadFile">
               {{ manual.loading ? "载入中" : "打开" }}
             </Button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5 border-t pt-3">
+          <label class="font-medium text-foreground">切换并打开揭棋文档 (.cjq)</label>
+          <div class="flex flex-wrap gap-2">
+            <Input v-model="jieqiLoadPath" placeholder="输入文件绝对路径..." class="min-w-0 flex-1" />
+            <Button variant="outline" size="sm" aria-label="浏览揭棋文档" @click="pickJieqiLoadFile"><FolderOpen class="size-3.5" />浏览</Button>
+            <Button variant="outline" size="sm" :disabled="manual.loading" @click="loadJieqiFile">打开</Button>
           </div>
         </div>
 
@@ -182,6 +236,56 @@ async function pickXqfSaveFile() {
             rows="4"
             class="font-mono text-caption leading-relaxed"
           />
+        </div>
+      </div>
+
+      <div v-else class="flex max-h-[70vh] flex-col gap-4 overflow-y-auto py-2 pr-1 text-xs">
+        <div class="flex flex-col gap-1.5">
+          <label class="font-medium text-foreground">打开揭棋文档 (.cjq)</label>
+          <div class="flex flex-wrap gap-2">
+            <Input v-model="jieqiLoadPath" placeholder="输入文件绝对路径..." class="min-w-0 flex-1" />
+            <Button variant="outline" size="sm" aria-label="浏览揭棋文档" @click="pickJieqiLoadFile"><FolderOpen class="size-3.5" />浏览</Button>
+            <Button size="sm" :disabled="manual.loading" @click="loadJieqiFile">{{ manual.loading ? "载入中" : "打开" }}</Button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5 border-t pt-3">
+          <label class="font-medium text-foreground">切换并打开中国象棋棋谱 (.pgn / .xqf)</label>
+          <div class="flex flex-wrap gap-2">
+            <Input v-model="loadPath" placeholder="输入文件绝对路径..." class="min-w-0 flex-1" />
+            <Button variant="outline" size="sm" aria-label="浏览中国象棋棋谱" @click="pickLoadFile"><FolderOpen class="size-3.5" />浏览</Button>
+            <Button variant="outline" size="sm" :disabled="manual.loading" @click="loadFile">打开</Button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 border-t pt-3 sm:grid-cols-2">
+          <label class="flex flex-col gap-1">标题<Input v-model="manual.jieqiMetadata.title" aria-label="揭棋标题" /></label>
+          <label class="flex flex-col gap-1">日期<Input v-model="manual.jieqiMetadata.date" aria-label="揭棋日期" /></label>
+          <label class="flex flex-col gap-1">红方<Input v-model="manual.jieqiMetadata.red_player" aria-label="揭棋红方" /></label>
+          <label class="flex flex-col gap-1">黑方<Input v-model="manual.jieqiMetadata.black_player" aria-label="揭棋黑方" /></label>
+          <label class="flex flex-col gap-1 sm:col-span-2">赛事<Input v-model="manual.jieqiMetadata.event_name" aria-label="揭棋赛事" /></label>
+        </div>
+
+        <div v-if="game.capabilities.save_private.enabled" class="flex flex-col gap-1.5 border-t pt-3">
+          <label class="font-medium text-foreground">保存私有续局</label>
+          <div class="flex flex-wrap gap-2">
+            <Input v-model="jieqiSavePath" placeholder="保存为 /path/to/game.cjq" class="min-w-0 flex-1" />
+            <Button variant="outline" size="sm" aria-label="选择私有揭棋保存位置" @click="pickJieqiSaveFile('private_game')"><FolderOpen class="size-3.5" />浏览</Button>
+            <Button size="sm" @click="saveJieqi('private_game')">保存</Button>
+          </div>
+          <p class="text-caption text-destructive">包含完整未揭身份，仅用于本人续局；不要公开分享。</p>
+        </div>
+
+        <div class="flex flex-col gap-1.5 border-t pt-3">
+          <label class="font-medium text-foreground">
+            {{ manual.documentKind === "public_replay" ? "保存公开回放" : "导出公开回放" }}
+          </label>
+          <div class="flex flex-wrap gap-2">
+            <Input v-model="jieqiPublicPath" placeholder="导出为 /path/to/replay.cjq" class="min-w-0 flex-1" />
+            <Button variant="outline" size="sm" aria-label="选择公开揭棋保存位置" @click="pickJieqiSaveFile('public_replay')"><FolderOpen class="size-3.5" />浏览</Button>
+            <Button size="sm" variant="outline" :disabled="!game.capabilities.save_public.enabled" @click="saveJieqi('public_replay')">导出</Button>
+          </div>
+          <p class="text-caption text-muted-foreground">只保存主线中已经公开的揭子信息；从私有局导出时不会清除私有续局的未保存状态。</p>
         </div>
       </div>
 

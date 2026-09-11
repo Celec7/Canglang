@@ -40,8 +40,8 @@ async function jumpTo(ply: number) {
   }
 }
 
-function nodeForPly(ply: number) {
-  return manual.activeLine[ply - 1] ?? manual.mainlineNodes[ply - 1] ?? null;
+function hasAnnotation(ply: number) {
+  return !!manual.annotationForPly(ply);
 }
 
 async function openBranchNode(nodeId: number) {
@@ -135,7 +135,7 @@ async function openBranchNode(nodeId: number) {
           >
             <span>{{ item.red.notation }}</span>
             <span v-if="item.red.public_detail" class="ml-1 text-caption text-muted-foreground">{{ item.red.public_detail }}</span>
-            <span v-if="nodeForPly(item.red.ply)?.comment" class="ml-1 text-primary" title="有备注" aria-label="有备注">●</span>
+            <span v-if="hasAnnotation(item.red.ply)" class="ml-1 text-primary" title="有备注" aria-label="有备注">●</span>
             <span v-if="item.red.is_check" class="ml-0.5 text-caption font-bold text-destructive">+</span>
           </button>
           <span v-else />
@@ -157,7 +157,7 @@ async function openBranchNode(nodeId: number) {
           >
             <span>{{ item.black.notation }}</span>
             <span v-if="item.black.public_detail" class="ml-1 text-caption text-muted-foreground">{{ item.black.public_detail }}</span>
-            <span v-if="nodeForPly(item.black.ply)?.comment" class="ml-1 text-primary" title="有备注" aria-label="有备注">●</span>
+            <span v-if="hasAnnotation(item.black.ply)" class="ml-1 text-primary" title="有备注" aria-label="有备注">●</span>
             <span v-if="item.black.is_check" class="ml-0.5 text-caption font-bold text-destructive">+</span>
           </button>
           <span v-else />
@@ -190,7 +190,7 @@ async function openBranchNode(nodeId: number) {
           </div>
         </div>
 
-        <MoveAnnotationEditor v-if="game.capabilities.edit_annotations.enabled && game.variant === 'xiangqi'" class="mt-2" />
+        <MoveAnnotationEditor v-if="game.capabilities.edit_annotations.enabled" class="mt-2" />
       </div>
     </ScrollArea>
   </div>

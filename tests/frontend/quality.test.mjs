@@ -476,24 +476,38 @@ for (const result of ["blackwin", "draw"]) {
   });
 }
 
-test("关闭软件直接关闭，不需要未保存棋谱提示", async () => {
-  const { manual } = await prepareGame(["h2e2"]);
-  manual.updateComment(manual.currentNode.id, "未保存备注");
-  assert.equal(manual.dirty, true);
-  window.confirm = () => {
-    assert.fail("不应弹出未保存棋谱确认窗口");
-  };
-  await closeWindow();
-  await flushLifecycle();
-  assert.equal(windowCommands.includes("plugin:window|close"), true);
+test("棋谱未保存保护由三路对话框异步决策", async () => {
+  const manual = useManualStore();
+  const game = useGameStore();
+  commands.sessionGet = async () => snapshot([]);
+  await game.refresh();
+  manual.updateComment(0, "未保存备注");
+  const pending = manual.confirmDiscard();
+  assert.equal(manual.discardPromptOpen, true);
+  await manual.resolveDiscard("cancel");
+  assert.equal(await pending, false);
+  assert.equal(manual.discardPromptOpen, false);
 });
 
-test("棋谱 confirmDiscard 直接返回 true，由用户自行保存", () => {
+test("关闭窗口等待未保存决策，取消阻止关闭而放弃后继续", async (t) => {
+  await mountLifecycle(t, "china2020");
   const manual = useManualStore();
-  window.confirm = () => {
-    assert.fail("不应弹出未保存棋谱确认窗口");
-  };
-  assert.equal(manual.confirmDiscard(), true);
+  manual.updateComment(0, "未保存备注");
+
+  const cancelledClose = closeWindow();
+  await flushLifecycle();
+  assert.equal(manual.discardPromptOpen, true);
+  assert.equal(windowCommands.filter((command) => command === "plugin:window|close").length, 1);
+  await manual.resolveDiscard("cancel");
+  await cancelledClose;
+  assert.equal(windowCommands.filter((command) => command === "plugin:window|close").length, 1);
+
+  const acceptedClose = closeWindow();
+  await flushLifecycle();
+  await manual.resolveDiscard("discard");
+  await acceptedClose;
+  await flushLifecycle();
+  assert.equal(windowCommands.filter((command) => command === "plugin:window|close").length, 3);
 });
 
 function mountEngineLogPanel() {

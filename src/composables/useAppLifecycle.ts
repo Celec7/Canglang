@@ -1,4 +1,6 @@
-import { onMounted, watch } from "vue";
+import { onBeforeUnmount, onMounted, watch } from "vue";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { resultLabel } from "@/lib/presentation";
 import { engineConfigFromProfile } from "@/lib/engine-profile";
 import { useA11yAnnouncer } from "@/composables/useA11yAnnouncer";
@@ -6,6 +8,8 @@ import { useBookStore } from "@/stores/book";
 import { useEngineStore } from "@/stores/engine";
 import { useGameStore } from "@/stores/game";
 import { usePreferencesStore } from "@/stores/preferences";
+import { useManualStore } from "@/stores/manual";
+import { closeWindow } from "@/lib/window";
 
 function applyTheme(theme: "light" | "dark") {
   if (typeof document === "undefined") return;
@@ -17,9 +21,25 @@ export function useAppLifecycle() {
   const preferences = usePreferencesStore();
   const engine = useEngineStore();
   const book = useBookStore();
+  const manual = useManualStore();
   const { politeMessage, assertiveMessage, announce } = useA11yAnnouncer();
+  let unlistenClose: UnlistenFn | null = null;
+  let allowClose = false;
 
   onMounted(async () => {
+    try {
+      unlistenClose = await getCurrentWindow().onCloseRequested(async (event) => {
+        if (allowClose || !manual.hasUnsavedChanges) return;
+        event.preventDefault();
+        if (await manual.confirmDiscard()) {
+          allowClose = true;
+          await closeWindow();
+        }
+      });
+    } catch {
+      // 浏览器预览没有桌面窗口；实际 Tauri 环境始终注册关闭保护
+    }
+
     await preferences.init().catch(() => undefined);
     applyTheme(preferences.theme);
 
@@ -57,6 +77,17 @@ export function useAppLifecycle() {
         await book.load(path).catch(() => undefined);
       }
     }
+  });
+
+  onBeforeUnmount(() => {
+    if (unlistenClose) {
+      try {
+        void Promise.resolve(unlistenClose()).catch(() => undefined);
+      } catch {
+        // 测试和浏览器预览可能没有完整的窗口事件注销实现
+      }
+    }
+    unlistenClose = null;
   });
 
   watch(

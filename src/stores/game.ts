@@ -4,6 +4,7 @@ import type {
   ApplyMoveLineRequest, JieqiPlayMode, NewGameOptions, PlyRecord, PreviewRequest,
   PreviewSnapshot, PublicPly, RuleExplanation, RuleProfile, RuleStatus,
   SessionCapabilities, SessionPly, SessionResult, SessionSnapshot, SessionToken,
+  JieqiDocumentOpenResult,
 } from "@/bindings";
 import { commands, SessionCommandError, unwrap, unwrapSession } from "@/lib/ipc";
 import { playSound } from "@/lib/sound";
@@ -206,7 +207,7 @@ export const useGameStore = defineStore("game", () => {
     guards: { preserveManual?: boolean; skipManualGuard?: boolean } = {},
   ): Promise<boolean> {
     const manual = useManualStore();
-    if (!guards.skipManualGuard && !manual.confirmDiscard()) return false;
+    if (!guards.skipManualGuard && !(await manual.confirmDiscard())) return false;
     await mutate(async (sessionToken) => unwrapSession(await commands.sessionNew(sessionToken, options)));
     if (!guards.preserveManual) manual.clear();
     useEngineStore().clearGameEvaluations();
@@ -246,14 +247,28 @@ export const useGameStore = defineStore("game", () => {
     await mutate(async (t) => unwrapSession(await commands.sessionCancelDraw(t, offerId, side)));
   }
 
+  async function openJieqiDocument(path: string): Promise<JieqiDocumentOpenResult> {
+    return serializeMutation(async () => {
+      try {
+        const opened = await unwrapSession(await commands.jieqiDocumentOpen(token(), path));
+        applySnapshot(opened.snapshot);
+        useEngineStore().clearGameEvaluations();
+        return opened;
+      } catch (cause) {
+        if (cause instanceof SessionCommandError && cause.code === "stale_session") await refresh();
+        throw cause;
+      }
+    });
+  }
+
   return {
     snapshot, gameId, revision, contentRevision, position, startPosition, variant,
     fen, startFen, currentFen, currentPly, result, redToMove, inCheck, ruleProfile,
     playMode, repetitionCount, repetitionExplanation, ruleStatus, ruleExplanation,
     history, xiangqiHistory, jieqiHistory, appliedHistory, futureHistory,
     capabilities, canUndo, canRedo, lastMove,
-    init, refresh, targets, makeMove, replayMove, previewLine, applyPreviewPrefix,
+    init, refresh, token, targets, makeMove, replayMove, previewLine, applyPreviewPrefix,
     newSession, newGame, setRuleProfile, undo, redo, resign, jumpTo,
-    offerDraw, respondDraw, cancelDraw,
+    offerDraw, respondDraw, cancelDraw, openJieqiDocument,
   };
 });
