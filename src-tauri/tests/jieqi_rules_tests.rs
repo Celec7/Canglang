@@ -1,6 +1,6 @@
 use canglang_app::core::jieqi::{
-    JieqiEndState, JieqiIdentity, JieqiIdentitySource, JieqiPiece, JieqiPosition, JieqiRules,
-    STANDARD_INITIAL_SLOTS, standard_identity_kinds,
+    JieqiEndState, JieqiIdentity, JieqiIdentitySource, JieqiMoveRejection, JieqiPiece,
+    JieqiPosition, JieqiRules, STANDARD_INITIAL_SLOTS, standard_identity_kinds,
 };
 use canglang_app::core::piece::{Color, PieceKind};
 use canglang_app::core::position::{Move, Position};
@@ -132,6 +132,22 @@ fn king_safety_and_stalemate_are_derived_from_public_geometry() {
     assert_eq!(
         JieqiRules::end_state(&stalemate),
         JieqiEndState::Stalemate { winner: Color::Red }
+    );
+}
+
+#[test]
+fn candidate_targets_show_self_check_moves_while_validation_still_rejects_them() {
+    let mut pinned = vec![piece(4, 0, 3, true), piece(27, 9, 4, true)];
+    pinned.push(piece(8, 0, 4, true));
+    pinned.push(piece(21, 5, 4, true));
+    let pinned = position(pinned, Color::Red);
+    let exposes_king = Move::new(Position::new(5, 4), Position::new(5, 5));
+
+    assert!(JieqiRules::candidate_targets(&pinned, exposes_king.from).contains(&exposes_king.to));
+    assert!(!JieqiRules::legal_targets(&pinned, exposes_king.from).contains(&exposes_king.to));
+    assert_eq!(
+        JieqiRules::validate_move(&pinned, exposes_king),
+        Err(JieqiMoveRejection::ExposesKing)
     );
 }
 

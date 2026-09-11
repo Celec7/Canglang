@@ -55,6 +55,26 @@ fn failed_move_is_atomic() {
 }
 
 #[test]
+fn move_exposing_king_has_specific_error_and_is_atomic() {
+    let initial = assigned_position(
+        vec![
+            piece(4, 0, 3, true),
+            piece(27, 9, 4, true),
+            piece(8, 0, 4, true),
+            piece(21, 5, 4, true),
+        ],
+        identities(),
+    );
+    let mut game = JieqiGame::new(initial, JieqiPlayMode::Training);
+    let before = game.clone();
+
+    let result = game.make_move(Move::new(Position::new(5, 4), Position::new(5, 5)));
+
+    assert_eq!(result, Err(JieqiGameError::ExposesKing));
+    assert_eq!(game, before);
+}
+
+#[test]
 fn hidden_capture_undo_and_redo_restore_identical_identity() {
     let mut assigned = identities();
     let rook = assigned[23].kind;

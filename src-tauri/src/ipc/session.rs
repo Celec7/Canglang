@@ -64,7 +64,7 @@ pub fn session_targets(
                 .map(|mv| mv.to_iccs())
                 .collect()
         }
-        ActiveGame::Jieqi(jieqi) => JieqiRules::legal_targets(jieqi.position(), from)
+        ActiveGame::Jieqi(jieqi) => JieqiRules::candidate_targets(jieqi.position(), from)
             .into_iter()
             .map(|to| Move::new(from, to).to_iccs())
             .collect(),
@@ -259,7 +259,7 @@ fn mutate_jieqi(
 
 fn map_jieqi(error: JieqiGameError) -> SessionError {
     let code = match error {
-        JieqiGameError::IllegalMove => SessionErrorCode::IllegalMove,
+        JieqiGameError::IllegalMove | JieqiGameError::ExposesKing => SessionErrorCode::IllegalMove,
         JieqiGameError::OperationUnavailable(_) => SessionErrorCode::OperationUnavailable,
         JieqiGameError::InvalidPly(_)
         | JieqiGameError::WrongSide
@@ -287,5 +287,18 @@ pub fn default_xiangqi_options(profile: RuleProfile) -> NewGameOptions {
     NewGameOptions::Xiangqi {
         fen: None,
         rule_profile: profile,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exposes_king_maps_to_specific_illegal_move_feedback() {
+        let error = map_jieqi(JieqiGameError::ExposesKing);
+
+        assert_eq!(error.code, SessionErrorCode::IllegalMove);
+        assert_eq!(error.message, "该走法会导致送将，不能走");
     }
 }

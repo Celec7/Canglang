@@ -116,6 +116,8 @@ pub enum JieqiGameError {
     OperationUnavailable(JieqiCapabilityReason),
     #[error("揭棋走法不合法")]
     IllegalMove,
+    #[error("该走法会导致送将，不能走")]
+    ExposesKing,
     #[error("走方参数与当前走方不一致")]
     WrongSide,
     #[error("历史位置越界: {0}")]
@@ -360,7 +362,10 @@ impl JieqiGame {
         &self,
         mv: Move,
     ) -> Result<(JieqiPosition, Option<JieqiGameResult>, PublicPly), JieqiGameError> {
-        JieqiRules::validate_move(self.position(), mv).map_err(|_| JieqiGameError::IllegalMove)?;
+        JieqiRules::validate_move(self.position(), mv).map_err(|rejection| match rejection {
+            super::JieqiMoveRejection::ExposesKing => JieqiGameError::ExposesKing,
+            _ => JieqiGameError::IllegalMove,
+        })?;
 
         let before = self.position();
         let moving = JieqiRules::piece_at(before, mv.from)

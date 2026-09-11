@@ -51,6 +51,16 @@ impl JieqiRules {
     }
 
     pub fn validate_move(position: &JieqiPosition, mv: Move) -> Result<(), JieqiMoveRejection> {
+        Self::validate_candidate(position, mv)?;
+        let piece = Self::piece_at(position, mv.from).expect("候选校验保证起点存在");
+        let next = moved_position(position, mv, false);
+        if Self::is_in_check(&next, piece.color) {
+            return Err(JieqiMoveRejection::ExposesKing);
+        }
+        Ok(())
+    }
+
+    fn validate_candidate(position: &JieqiPosition, mv: Move) -> Result<(), JieqiMoveRejection> {
         if !mv.from.is_valid() || !mv.to.is_valid() || mv.from == mv.to {
             return Err(JieqiMoveRejection::InvalidPosition);
         }
@@ -70,10 +80,6 @@ impl JieqiRules {
         if !Self::can_piece_attack(position, piece, kind, mv.from, mv.to) {
             return Err(JieqiMoveRejection::InvalidGeometry);
         }
-        let next = moved_position(position, mv, false);
-        if Self::is_in_check(&next, piece.color) {
-            return Err(JieqiMoveRejection::ExposesKing);
-        }
         Ok(())
     }
 
@@ -90,6 +96,19 @@ impl JieqiRules {
     }
 
     pub fn legal_targets(position: &JieqiPosition, from: Position) -> Vec<Position> {
+        Self::targets_matching(position, from, Self::validate_move)
+    }
+
+    /// 返回符合走子几何的展示候选，保留可能送将的位置供落子时解释
+    pub fn candidate_targets(position: &JieqiPosition, from: Position) -> Vec<Position> {
+        Self::targets_matching(position, from, Self::validate_candidate)
+    }
+
+    fn targets_matching(
+        position: &JieqiPosition,
+        from: Position,
+        validate: fn(&JieqiPosition, Move) -> Result<(), JieqiMoveRejection>,
+    ) -> Vec<Position> {
         let Some(piece) = Self::piece_at(position, from) else {
             return Vec::new();
         };
@@ -100,7 +119,7 @@ impl JieqiRules {
         for row in 0..ROW_COUNT as u8 {
             for col in 0..COL_COUNT as u8 {
                 let to = Position::new(row, col);
-                if Self::validate_move(position, Move::new(from, to)).is_ok() {
+                if validate(position, Move::new(from, to)).is_ok() {
                     targets.push(to);
                 }
             }
