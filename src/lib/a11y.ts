@@ -1,4 +1,4 @@
-import { pieceColor, pieceGlyph, type Board } from "./chess";
+import { jieqiPieceName, pieceColor, pieceGlyph, type Board } from "./chess";
 import { RED_FILE_LABELS } from "./board-view";
 
 const RANK_LABELS: readonly string[] = [
@@ -36,7 +36,7 @@ export interface SquareLabelOptions {
   col: number;
   board: Board;
   isSelected?: boolean;
-  isLegalTarget?: boolean;
+  isCandidateTarget?: boolean;
   isInCheck?: boolean;
 }
 
@@ -44,7 +44,7 @@ export interface SquareLabelOptions {
  * 生成符合中国传统象棋术语的交叉点无障碍文本
  */
 export function formatTraditionalSquareLabel(options: SquareLabelOptions): string {
-  const { row, col, board, isSelected, isLegalTarget, isInCheck } = options;
+  const { row, col, board, isSelected, isCandidateTarget, isInCheck } = options;
   const piece = board[row]?.[col];
   const file = traditionalFileName(row, col);
   const rank = traditionalRankName(row);
@@ -52,15 +52,14 @@ export function formatTraditionalSquareLabel(options: SquareLabelOptions): strin
 
   let text = "";
   if (piece) {
-    const side = pieceColor(piece) === "red" ? "红方" : "黑方";
-    const name = pieceGlyph(piece);
-    text = `${side} ${name}，${posDescription}`;
+    const color = pieceColor(piece);
+    const side = color === "red" ? "红方" : "黑方";
     const jieqi = piece.split(":");
-    if (jieqi[0] === "jieqi" && jieqi[1] === "hidden") {
-      const roleNames: Record<string, string> = {
-        king: "将帅", advisor: "士", bishop: "象", knight: "马", rook: "车", cannon: "炮", pawn: "兵卒",
-      };
-      text += `，首步按${roleNames[jieqi[3]] ?? "公开角色"}行走`;
+    const hiddenJieqi = jieqi[0] === "jieqi" && jieqi[1] === "hidden";
+    const name = hiddenJieqi ? "暗子" : pieceGlyph(piece);
+    text = `${side} ${name}，${posDescription}`;
+    if (hiddenJieqi) {
+      text += `，首步按${jieqiPieceName(jieqi[3], color)}行走`;
     }
   } else {
     text = `${posDescription}，空位`;
@@ -68,11 +67,14 @@ export function formatTraditionalSquareLabel(options: SquareLabelOptions): strin
 
   if (isSelected) {
     text += "，已选中";
-  } else if (isLegalTarget) {
+  } else if (isCandidateTarget) {
+    const candidate = board.some((rank) => rank.some((value) => value?.startsWith("jieqi:")))
+      ? "候选"
+      : "可";
     if (piece) {
-      text += "，可吃子目标";
+      text += `，${candidate}吃子目标`;
     } else {
-      text += "，可落子目标";
+      text += `，${candidate}落子目标`;
     }
   }
 

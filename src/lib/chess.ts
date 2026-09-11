@@ -37,16 +37,28 @@ export const PIECE_GLYPH: Record<string, string> = {
   p: "卒",
 };
 
+const JIEQI_PIECE_CODES: Record<string, [string, string]> = {
+  king: ["K", "k"],
+  advisor: ["A", "a"],
+  bishop: ["B", "b"],
+  knight: ["N", "n"],
+  rook: ["R", "r"],
+  cannon: ["C", "c"],
+  pawn: ["P", "p"],
+};
+
+/** 将揭棋公开角色转换为对应阵营的中国象棋棋子名 */
+export function jieqiPieceName(kind: string | null | undefined, color: Turn): string {
+  if (!kind) return "未知棋子";
+  const code = JIEQI_PIECE_CODES[kind]?.[color === "red" ? 0 : 1];
+  return code ? PIECE_GLYPH[code] : "未知棋子";
+}
+
 export function pieceGlyph(ch: string): string {
-  if (ch.startsWith("jieqi:hidden:")) return "暗";
+  if (ch.startsWith("jieqi:hidden:")) return "";
   if (ch.startsWith("jieqi:revealed:")) {
     const [, , color, kind] = ch.split(":");
-    const codes: Record<string, [string, string]> = {
-      king: ["K", "k"], advisor: ["A", "a"], bishop: ["B", "b"],
-      knight: ["N", "n"], rook: ["R", "r"], cannon: ["C", "c"], pawn: ["P", "p"],
-    };
-    const code = codes[kind]?.[color === "red" ? 0 : 1];
-    return code ? PIECE_GLYPH[code] : "?";
+    return jieqiPieceName(kind, color === "black" ? "black" : "red");
   }
   return PIECE_GLYPH[ch] ?? ch;
 }

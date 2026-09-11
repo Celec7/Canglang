@@ -43,7 +43,7 @@ Store 经 `src/lib/ipc.ts` 调用命令。`GameStore` 用 `SessionSnapshot` 覆�
 
 `App.vue` 组合 `AppToolbar`、`ChessBoard`、`BoardControls`、`AnalysisWorkspace`/`JieqiInfoPanel`、`MoveList`、`ReplayControls` 与全局 Dialog。面板与按钮用 `src/components/ui` 的 Button、Card、Tabs、Badge 等组件。新增 UI 前先复用已有组件与语义颜色。
 
-棋盘负责 SVG 绘制与点击目标，`useBoard` 负责交互状态，Rust 负责最终合法性判断；引擎分析输出由 `MultiPvList` 展示，点击 PV 后由 Rust 纯预览快照驱动棋盘渲染，明确应用才写入 `GameStore`。`BookTable` 展示 Rust 返回的开局库候选。`SettingsView` 只提供 Dialog 外壳与导航，领域内容位于 `components/settings/*`，引擎档案管理与内置引擎在线获取由 `useEngineSettings` 协调。设置页中的 selected Profile 只是待编辑项，只有“保存并应用当前引擎”成功后才更新 `activeEngineId`；Profile 到 `EngineConfig` 的转换集中在 `src/lib/engine-profile.ts`。
+棋盘负责 SVG 绘制与点击目标，`useBoard` 负责交互状态，Rust 负责最终合法性判断。目标高亮展示符合移动几何的候选位置，揭棋不会提前隐藏可能送将的候选；用户尝试该位置时由 Rust 拒绝，现有全局 toast 显示“该走法会导致送将，不能走”。引擎分析输出由 `MultiPvList` 展示，点击 PV 后由 Rust 纯预览快照驱动棋盘渲染，明确应用才写入 `GameStore`。`BookTable` 展示 Rust 返回的开局库候选。`SettingsView` 只提供 Dialog 外壳与导航，领域内容位于 `components/settings/*`，引擎档案管理与内置引擎在线获取由 `useEngineSettings` 协调。设置页中的 selected Profile 只是待编辑项，只有“保存并应用当前引擎”成功后才更新 `activeEngineId`；Profile 到 `EngineConfig` 的转换集中在 `src/lib/engine-profile.ts`。
 
 普通走子或应用 PV 成功后，`GameStore` 将后端快照中游标以内的历史交给 `ManualStore.recordHistory`，同步普通棋谱树。清空棋谱后继续走子同样恢复完整的当前历史。已有节点、备注与分支保留，新节点使棋谱进入待保存状态并使旧导出文本失效；后端拒绝整条 PV 时不更新棋谱。揭棋走子不建立 `ChessManual` 或伪造 FEN；`ManualStore` 只保存一份公开元数据和 `ply → 备注`，训练改走截断主线时同步删除越界备注。
 
@@ -53,7 +53,7 @@ PGN/XQF 保存记录发起请求时的编辑版本，只在成功且版本未改
 
 `useAppLifecycle` 在应用挂载时注册 Tauri 窗口关闭监听。新局、打开文档和关闭窗口都调用 `ManualStore.confirmDiscard`，由全局 `UnsavedChangesDialog` 提供保存、放弃、取消三路选择；路径选择取消或保存失败保持当前工作并阻止后续替换，成功保存完成后才继续。卸载时注销窗口监听。
 
-揭棋棋盘的暗子只显示阵营和公开首步角色，首次合法移动成功后播放一次揭子动效；可访问名称同样不包含真实身份。`JieqiInfoPanel` 只显示公开吃子与暗子数量，并解释引擎、开局库、FEN 和摆子能力不可用的原因。求和使用独立 Dialog 呈现提出、回应和取消动作。
+揭棋棋盘的暗子复用普通棋子的棋子面、边框和阵营色，中心不显示文字、遮罩或虚线；可访问名称仍包含阵营与公开首步角色，但不包含真实身份。首次合法移动成功后只播放一次 120ms 淡入，减少动画设置下禁用。`JieqiInfoPanel` 只显示公开吃子与暗子数量，已揭角色按阵营显示对应的中文象棋棋子名，并解释引擎、开局库、FEN 和摆子能力不可用的原因。求和使用独立 Dialog 呈现提出、回应和取消动作。
 
 `src/lib/presentation.ts` 负责结果、规则状态与回合的中文文案，`engine-evaluation.ts` 负责分数到胜率的换算与格式化，`sound.ts` 提供程序化音效，`window.ts` 封装无边框窗口控制。这些模块只做展示换算，不重新计算领域结论。
 

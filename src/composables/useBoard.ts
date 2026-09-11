@@ -1,5 +1,5 @@
 // 棋盘交互状态与辅助，由对局 store 驱动、并经 IPC 回落到 Rust 规则。负责棋子
-// 选择、合法走法高亮，以及把走法分发给 store
+// 选择、候选走法高亮，以及把走法分发给 store
 
 import { computed, ref, watch } from "vue";
 import { boardToView, viewToBoard } from "@/lib/board-view";
@@ -27,7 +27,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
   const preferences = usePreferencesStore();
   const { show } = useToast();
   const selected = ref<Coord | null>(null);
-  const legalTargets = ref<Coord[]>([]);
+  const candidateTargets = ref<Coord[]>([]);
   const focused = ref<Coord | null>(null);
 
   // 棋盘替换可能来自悔棋/重做、摆设局面或重放
@@ -36,7 +36,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     () => [game.revision, game.result],
     () => {
       selected.value = null;
-      legalTargets.value = [];
+      candidateTargets.value = [];
       focused.value = null;
     }
   );
@@ -68,7 +68,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
         .filter((move): move is { from: Coord; to: Coord } => !!move && sameCoord(move.from, [row, col]))
         .map((move) => move.to);
       selected.value = [row, col];
-      legalTargets.value = targets;
+      candidateTargets.value = targets;
     } catch (cause) {
       show(cause instanceof Error ? cause.message : String(cause));
     }
@@ -79,13 +79,13 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
       const result = await game.makeMove(coordsToIccs(from, to));
       if (result.legal) {
         selected.value = null;
-        legalTargets.value = [];
+        candidateTargets.value = [];
         return;
       }
 
       show(inCheck.value ? "请应将" : "不可送将");
       selected.value = null;
-      legalTargets.value = [];
+      candidateTargets.value = [];
     } catch (cause) {
       show(cause instanceof Error ? cause.message : String(cause));
     }
@@ -118,9 +118,9 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
       return;
     }
 
-    const isLegalTarget = legalTargets.value.some((target) => sameCoord(target, coord));
+    const isCandidateTarget = candidateTargets.value.some((target) => sameCoord(target, coord));
     const from = selected.value;
-    if (isLegalTarget) {
+    if (isCandidateTarget) {
       await submit(from, coord);
       return;
     }
@@ -133,12 +133,12 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     }
 
     selected.value = null;
-    legalTargets.value = [];
+    candidateTargets.value = [];
   }
 
   function clearSelection() {
     selected.value = null;
-    legalTargets.value = [];
+    candidateTargets.value = [];
   }
 
   function setFocused(coord: Coord | null) {
@@ -194,7 +194,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     inCheck,
     gameOver,
     selected,
-    legalTargets,
+    candidateTargets,
     lastMove,
     focused,
     onSquareClick,

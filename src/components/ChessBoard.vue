@@ -56,7 +56,7 @@ const {
   turn,
   inCheck,
   selected,
-  legalTargets,
+  candidateTargets,
   lastMove,
   focused,
   onSquareClick,
@@ -487,7 +487,7 @@ function onBoardSquarePointerDown() {
 const squareLabels = computed<string[]>(() => {
   const currentBoard = renderedBoard.value;
   const sel = renderedSelection.value;
-  const targets = legalTargets.value;
+  const targets = candidateTargets.value;
   const targetSet = new Set(targets.map(([r, c]) => r * 9 + c));
   const inCheckVal = renderedInCheck.value;
   const turnVal = renderedTurn.value;
@@ -510,7 +510,7 @@ const squareLabels = computed<string[]>(() => {
         col: c,
         board: currentBoard,
         isSelected: isSel,
-        isLegalTarget: isTarget,
+        isCandidateTarget: isTarget,
         isInCheck: isKingCheck,
       });
     }
@@ -524,11 +524,6 @@ function isKing(piece: string): boolean {
 
 function isHiddenJieqi(piece: string): boolean {
   return parseJieqiPieceToken(piece)?.state === "hidden";
-}
-
-function hiddenRoleGlyph(piece: string): string {
-  const parsed = parseJieqiPieceToken(piece);
-  return parsed ? pieceGlyph(`jieqi:revealed:${parsed.color}:${parsed.kind}`) : "";
 }
 
 function shouldShowFocusMark(): boolean {
@@ -702,9 +697,9 @@ function shouldShowFocusMark(): boolean {
             :stroke-width="BOARD_GEOMETRY.checkStroke"
           />
           <circle :r="BOARD_GEOMETRY.pieceRadius" :fill="pieceColor(p) === 'red' ? 'var(--board-red)' : 'var(--board-black)'" stroke="var(--board-line)" :stroke-width="BOARD_GEOMETRY.gridStroke" />
-          <circle :r="BOARD_GEOMETRY.pieceFaceRadius" :fill="isHiddenJieqi(p) ? 'var(--jieqi-piece-back)' : 'var(--piece-face)'" />
-          <circle v-if="isHiddenJieqi(p)" :r="BOARD_GEOMETRY.pieceFaceRadius * 0.72" fill="none" stroke="var(--jieqi-piece-back-mark)" :stroke-width="BOARD_GEOMETRY.gridStroke" stroke-dasharray="3 2" />
+          <circle :r="BOARD_GEOMETRY.pieceFaceRadius" fill="var(--piece-face)" />
           <text
+            v-if="!isHiddenJieqi(p)"
             text-anchor="middle"
             dominant-baseline="central"
             :fill="pieceColor(p) === 'red' ? 'var(--board-red)' : 'var(--board-black)'"
@@ -712,9 +707,6 @@ function shouldShowFocusMark(): boolean {
             font-weight="700"
           >
             {{ pieceGlyph(p) }}
-          </text>
-          <text v-if="isHiddenJieqi(p)" text-anchor="middle" :y="BOARD_GEOMETRY.pieceFaceRadius * 0.58" :fill="pieceColor(p) === 'red' ? 'var(--board-red)' : 'var(--board-black)'" :font-size="BOARD_GEOMETRY.pieceFontSize * 0.26" font-weight="600">
-            首步{{ hiddenRoleGlyph(p) }}
           </text>
         </g>
       </template>
@@ -757,7 +749,7 @@ function shouldShowFocusMark(): boolean {
       />
     </g>
 
-    <template v-if="!props.editorMode" v-for="t in legalTargets" :key="`t${t[0]}-${t[1]}`">
+    <template v-if="!props.editorMode" v-for="t in candidateTargets" :key="`t${t[0]}-${t[1]}`">
       <circle
         :cx="point(t[0], t[1]).x"
         :cy="point(t[0], t[1]).y"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Badge, Separator } from "@/components/ui";
+import { jieqiPieceName } from "@/lib/chess";
 import { useGameStore } from "@/stores/game";
 
 const game = useGameStore();
@@ -32,7 +33,7 @@ const latestReveals = computed(() => game.jieqiHistory.filter((ply) => ply.revea
         <ul v-if="latestReveals.length" class="flex flex-col gap-1.5 text-xs">
           <li v-for="ply in latestReveals" :key="ply.ply" class="flex justify-between gap-2">
             <span>第 {{ ply.ply }} 手 · {{ ply.notation }}</span>
-            <Badge variant="outline">{{ ply.revealed }}</Badge>
+            <Badge variant="outline">{{ jieqiPieceName(ply.revealed, ply.mover) }}</Badge>
           </li>
         </ul>
         <p v-else class="text-xs text-muted-foreground">尚未揭开暗子</p>
