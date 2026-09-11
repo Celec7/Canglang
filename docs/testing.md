@@ -20,16 +20,20 @@ summary: 规定 Canglang 各模块的测试层级以及变更到验证命令的�
 | 中文记谱和 hash | `notation_tests.rs`、`zobrist_tests.rs` |
 | 规则档案与循环裁决 | `adjudication_tests.rs` |
 | `GameState` 和对局命令 | `game_tests.rs`、`ipc_core_tests.rs` |
+| 揭棋身份、规则、记谱和历史 | `jieqi_model_tests.rs`、`jieqi_rules_tests.rs`、`jieqi_notation_tests.rs`、`jieqi_game_tests.rs` |
+| 统一会话版本与模式生命周期 | `session_tests.rs`、`session_lifecycle_tests.rs`、`jieqi_session.test.mjs` |
 | UCI/UCCI 格式与解析 | `protocol_tests.rs`、`engine_tests.rs` |
 | 外部引擎进程 | `engine_tests.rs` 的 fake UCI（握手、完整历史、会话日志、stderr、CRLF、停止/异常退出）；`engine_e2e_tests.rs`，需要可用引擎时运行 |
 | 内置引擎下载与装配 | `engine::installer` 单元测试；`installer_e2e_tests.rs`，需要官方压缩包时运行 |
 | 配置、便携模式与原子写入 | `engine::config` 单元测试 |
 | PGN/XQF 和编码 | `pgn_parser_tests.rs`、`pgn_exporter_tests.rs`、`xqf_parser_tests.rs`、`xqf_exporter_tests.rs`、`manual_io_service_tests.rs` |
+| 揭棋 `.cjq` 与私密边界 | `jieqi_manual_tests.rs`、`jieqi_document_ipc_tests.rs` |
 | 开局库 | `book_tests.rs`；云库解析用 `engine::book::cloud_book` 单元测试，不依赖网络 |
 | IPC 模型或 Specta 绑定 | `ipc_core_tests.rs`、`cargo test`、`pnpm typecheck` |
 | Vue、Tailwind 或 Vite | `pnpm typecheck`、`pnpm build` |
 | 前端棋谱同步、开局库查询/评价与启动规则 | `pnpm test`、`pnpm typecheck` |
 | 棋谱保存竞争、窗口关闭保护与终局停止分析 | `pnpm test`，通过可控 IPC 响应及 Tauri 事件模拟验证真实 store/composable；桌面关闭另做运行时验收 |
+| 揭棋文档编辑、保存竞争与加载回滚 | `jieqi-document.test.mjs`；配合 Rust `.cjq` 测试验证后端事实与公开返回 |
 | 响应式与无障碍 UI | 浏览器 AX tree/键盘验收：`1280×800`、`1024×768`、`800×700`；检查 Dialog 焦点、棋盘 roving tabindex、ARIA 名称/状态和 live region |
 | Tauri 配置或桌面集成 | `pnpm exec tauri build --debug --no-bundle` |
 
@@ -68,6 +72,10 @@ UCCI_ENGINE=/path/to/ucci-engine \
 ## 测试不变量
 
 - 非法走法不能改变对局局面、历史或结果。
+- 揭棋合法性复用象棋移动几何并叠加明暗状态；非法首步不能揭示真实身份。
+- 揭棋公开快照、公开回放与文档 IPC 响应不得包含 Assigned、稳定棋子 ID 或未揭真实身份。
+- 私有与公开 `.cjq` 必须逐步重放验证；文件失败、陈旧 token 或保存失败不得替换当前对局或损坏旧文件。
+- 会话写操作必须校验 token；前端串行发送，`stale_session` 不自动重试。
 - 悔棋和重做必须恢复相同的局面和走方。
 - FEN 解析和序列化应保持规范化 round-trip。
 - UCI/UCCI 格式化和解析必须分别符合各自协议。
@@ -78,6 +86,7 @@ UCCI_ENGINE=/path/to/ucci-engine \
 - 配置写入必须原子替换，便携模式下路径跟随可执行文件所在目录。
 - 云库超时或不可用时查询必须降级为未命中，不得使 `bookQuery` 失败或伪造来源。
 - 引擎停止必须结束搜索和相关事件转发任务。
+- 揭棋会话必须在前后端同时禁用普通象棋引擎和开局库，换局停止旧引擎生命周期。
 
 ## 失败处理
 

@@ -19,9 +19,9 @@ summary: 规定 Canglang 正式文档的职责、事实归属、链接和变更�
 | `architecture.md` | 应用组成、主数据流和运行时关系 |
 | `module-boundaries.md` | 模块所有权、依赖方向和禁止的跨层依赖 |
 | `ipc-contract.md` | Tauri 命令、事件、序列化和生成绑定契约 |
-| `chess-domain.md` | 棋盘、走法、棋规和对局状态契约 |
+| `chess-domain.md` | 象棋及其上层揭棋的棋盘、走法、身份、棋规和统一对局状态契约 |
 | `engine.md` | 引擎协议、进程、会话、分析和事件流 |
-| `manual-formats.md` | PGN、XQF、编码、棋谱模型和开局库 |
+| `manual-formats.md` | PGN、XQF、揭棋 `.cjq`、编码、棋谱模型和开局库 |
 | `frontend.md` | Vue、Pinia、组件、样式和前端数据流 |
 | `code-style.md` | Rust、TypeScript、Vue、Tailwind 和跨边界代码风格 |
 | `development.md` | 环境搭建、日常命令和桌面开发流程 |
@@ -50,6 +50,8 @@ Metadata 只说明文档身份和职责，不记录作者、更新时间、进�
 
 - 使用中文；代码符号、协议名称、命令名和必要的英文术语保留原文。
 - 架构文档写组件地图和主流程；字段、错误和状态细节归入对应契约文档。
+- 描述揭棋时明确其复用象棋棋盘与移动几何，再说明身份和明暗叠加规则；不得写成互不相关的平行棋规。
+- 隐藏身份的公开范围归 `chess-domain.md`，`.cjq` 字段和限额归 `manual-formats.md`，命令和 token 归 `ipc-contract.md`，不要跨文档复制完整定义。
 - 文档描述当前代码行为，不写“即将”“未来实现”或迁移过程。
 - 使用相对 Markdown 链接，移动或删除文件后搜索并修复所有引用。
 - Mermaid 只用于确实能表达模块关系、顺序或分支的地方；表格用于所有权和 API 映射。

@@ -57,7 +57,7 @@ summary: 统一 Canglang 的 Rust、TypeScript、Vue、Tailwind 和跨边界代�
 
 - Rust 内部使用 Rust 命名约定，Specta 生成的 TypeScript API 使用 camelCase 命令函数名和 Rust 序列化字段名。
 - FEN 用于局面，ICCS 用于走法；不要让同一个字段在不同边界隐含不同编码。
-- `GameSnapshot` 是对局状态视图、`ThinkData` 是引擎实时输出、`BookMove` 是开局库查询结果；前端类型直接来自生成绑定或与事件契约一致的本地类型。
+- `SessionSnapshot` 是普通象棋/揭棋统一对局视图、`ThinkData` 是引擎实时输出、`BookMove` 是开局库查询结果；前端类型直接来自生成绑定或与事件契约一致的本地类型。
 - 错误在 Rust 侧分类，在前端通过 `unwrap` 统一抛出；不要用错误字符串驱动正常 UI 分支。
 
 ## 工具和验证

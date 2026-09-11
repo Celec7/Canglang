@@ -17,7 +17,7 @@ Canglang 是基于 Tauri v2 的中国象棋桌面应用。先读架构与模块�
 1. [架构总览](architecture.md)：了解 Vue 前端、Tauri IPC 和 Rust 服务如何组合。
 2. [模块边界](module-boundaries.md)：确认新逻辑的归属和允许的依赖方向。
 3. [开发指南](development.md)：搭建环境并运行常用检查。
-4. 按任务阅读 [中国象棋领域](chess-domain.md)、[IPC 契约](ipc-contract.md)、[引擎系统](engine.md)、[棋谱与开局库](manual-formats.md) 或 [前端开发](frontend.md)。
+4. 按任务阅读 [象棋与揭棋领域](chess-domain.md)、[IPC 契约](ipc-contract.md)、[引擎系统](engine.md)、[棋谱与开局库](manual-formats.md) 或 [前端开发](frontend.md)。
 5. 修改完成后参考 [测试策略](testing.md) 选择验证范围。
 
 ## 文档地图

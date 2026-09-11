@@ -7,7 +7,7 @@ Canglang 是一个基于 Tauri v2 的中国象棋桌面应用。Vue 3、Vite、T
 - [架构总览](docs/architecture.md)
 - [模块边界](docs/module-boundaries.md)
 - [IPC 契约](docs/ipc-contract.md)
-- [中国象棋领域](docs/chess-domain.md)
+- [象棋与揭棋领域](docs/chess-domain.md)
 - [引擎系统](docs/engine.md)
 - [棋谱与开局库](docs/manual-formats.md)
 - [前端开发](docs/frontend.md)
@@ -25,7 +25,7 @@ Canglang 是一个基于 Tauri v2 的中国象棋桌面应用。Vue 3、Vite、T
 - 前端通过 `src/lib/ipc.ts` 和 `src/bindings/generated.ts` 访问 IPC；不得在组件中直接手写 `invoke`，不得手工修改生成绑定。
 - `src/bindings/generated.ts` 由 `tauri-specta` 从带 `#[specta::specta]` 的 Rust 命令和类型生成；命令或公开数据结构变化时必须重新生成并检查消费者。
 - `ThinkData` 通过 `think://` 事件发送，最佳着法通过 `bestmove://` 事件发送；事件 payload 必须与 Rust 模型保持一致。
-- FEN 是局面的跨边界表示，ICCS 是走法的跨边界表示；除非契约明确要求，不要在边界临时拼装另一种格式。
+- ICCS 是两种棋局的走法跨边界表示；普通象棋局面用 FEN，揭棋局面用不含隐藏身份的公开结构化视图，具体契约见[象棋与揭棋领域](docs/chess-domain.md)。
 - 引擎子进程必须通过 `EngineProcess`、`EngineSession` 和协议抽象管理；停止、重启和进程退出必须清理对应任务。
 - PGN、XQF 和 `.bh` 文件由 Rust 服务读取和解析；前端只消费结构化结果，不直接解析文件格式。
 - 配置只经 `ConfigService` 读写，保持原子写入；外部网络访问只允许出现在云库查询、内置引擎下载和系统浏览器打开链接。

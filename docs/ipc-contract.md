@@ -22,6 +22,16 @@ summary: 规定 Rust Tauri 命令、引擎事件和前端生成绑定之间的�
 
 `parseFen` 与 `validatePosition` 是两层校验：前者只要求结构完整、可表示（照面王等违规局面仍可解析），后者追加 `MoveValidator::validate_board` 的完整棋规校验。`newGame` 接收自定义 FEN 时同样执行完整棋规校验，避免正式对局建立在非法局面上。`getLegalMoves` 返回全部合法走法，`getCandidateMoves` 只返回指定棋子的候选目标；`jumpTo` 移动历史游标而不改动历史本身。
 
+这些命令保留普通象棋兼容契约。当前应用主路径使用下述统一 Session 命令；揭棋不得调用只接受 FEN 的 Core 会话命令。
+
+### Session
+
+`sessionGet`、`sessionNew`、`sessionTargets`、`sessionMove`、`sessionUndo`、`sessionRedo`、`sessionJump`、`sessionResign`、`sessionOfferDraw`、`sessionRespondDraw` 和 `sessionCancelDraw`。
+
+除只读的 `sessionGet` 外，命令接收 `SessionToken { game_id, expected_revision }`。成功变更增加 `revision`；改变保留主线或终局的操作同时增加 `content_revision`，只读跳转、撤销/重做游标与未接受的求和只增加呈现修订。token 不匹配返回 `stale_session`，服务端不自动套用或重试陈旧请求；前端刷新快照后由用户动作决定下一步。
+
+`sessionNew` 以 `NewGameOptions` 选择普通象棋或揭棋。`SessionSnapshot.position` 与 `start_position` 是带标签的 `PositionView`：普通象棋携带 FEN，揭棋携带 `JieqiPositionViewV1`。`history` 对应 `SessionPly::Xiangqi(PlyRecord)` 或 `SessionPly::Jieqi(PublicPly)`；`capabilities` 是操作可用性的事实来源，禁用项同时给出原因。揭棋求和使用带 ID 的待回应请求，回应方、取消方和过期 ID 均由 Rust 校验。
+
 ### Engine
 
 `engineStart`、`engineAnalyze`、`engineMoveNow`、`engineChangeTactic`、`engineStop` 和 `engineStatus`。
@@ -34,7 +44,7 @@ summary: 规定 Rust Tauri 命令、引擎事件和前端生成绑定之间的�
 
 `manualLoad`、`manualPickFile`、`manualParseText`、`manualSave`、`manualSaveXqf`、`manualExportPgn`、`jieqiDocumentSave` 和 `jieqiDocumentOpen`。
 
-棋谱路径与 `ChessManual` 在边界传递，解析与导出在 Rust 完成。`manualPickFile(action)` 由 Rust 弹出原生文件选择器：`open`/`save` 保持普通 `.pgn/.xqf` 契约，`open_jieqi`、`save_jieqi_private`、`save_jieqi_public` 使用 `.cjq` 过滤器。`ChessManual.root` 及其后代节点的 `comment` 是可选多行纯文本：根节点表示起始局面说明，普通节点表示走完对应着法后的说明；备注编辑不新增对局快照字段，也不新增实时事件。`manualSaveXqf(path, manual, version)` 当前只接受版本 `10`，生成未加密 canonical XQF；多分支棋谱和无法用 GBK 表示的文本返回错误。前端不得解析 PGN、XQF 或 `.cjq`，也不得自行处理编码和转义。
+棋谱路径与 `ChessManual` 在边界传递，解析与导出在 Rust 完成。`manualPickFile(action)` 由 Rust 弹出原生文件选择器：`open` 过滤 `.pgn/.xqf`，`save` 保存 `.pgn`，`save_xqf` 保存 `.xqf`，`open_jieqi`、`save_jieqi_private`、`save_jieqi_public` 使用 `.cjq` 过滤器。`ChessManual.root` 及其后代节点的 `comment` 是可选多行纯文本：根节点表示起始局面说明，普通节点表示走完对应着法后的说明；备注编辑不新增对局快照字段，也不新增实时事件。`manualSaveXqf(path, manual, version)` 当前只接受版本 `10`，生成未加密 canonical XQF；多分支棋谱和无法用 GBK 表示的文本返回错误。前端不得解析 PGN、XQF 或 `.cjq`，也不得自行处理编码和转义。
 
 `jieqiDocumentSave(token, path, kind, metadata, annotations, editRevision)` 只接受揭棋会话。后端在持锁期间校验版本 token、能力并克隆不可变对局事实，随后在锁外原子写入；回执原样携带所导出的 `gameId`、`contentRevision`、`editRevision` 与 `kind`，供前端判定保存结果是否仍然新鲜。`private_game` 的固定身份不会出现在参数或回执中。
 
@@ -63,6 +73,10 @@ summary: 规定 Rust Tauri 命令、引擎事件和前端生成绑定之间的�
 | `MoveResult` | `fen`、`iccs`、`chinese_notation`、`legal`、`check`、`game_over` | 单次走子结果 |
 | `PlyRecord` | `ply`、`iccs`、`notation`、`mover`、`is_capture`、`is_check`、`fen` | 主线历史条目 |
 | `GameSnapshot` | `fen`、`start_fen`、`current_fen`、`current_ply`、`history`、`result`、`red_to_move`、`in_check`、`can_undo`、`can_redo`、`rule_profile`、`repetition_count`、`repetition_explanation`、`rule_status`、`rule_explanation` | 受管对局状态视图 |
+| `SessionToken` | `game_id`、`expected_revision` | 统一会话乐观并发凭据 |
+| `SessionSnapshot` | 游戏/内容修订、两种 `PositionView`、完整主线与游标、来源、规则、结果、能力和求和请求 | 普通象棋与揭棋的统一公开视图 |
+| `PublicPly` | `ply`、`iccs`、`mover`、`notation`、`revealed`、公开吃子、`is_check` | 不含隐藏身份的揭棋历史事件 |
+| `JieqiDocumentReceipt` | `game_id`、`content_revision`、`edit_revision`、`kind` | 判断异步保存结果是否仍匹配当前文档 |
 | `EngineConfig` | `path`、`protocol`、`options`、`nnue_path` | 外部引擎配置 |
 | `EngineInfo` | `name`、`protocol`、`ready`、`diagnostic` | 启动握手结果 |
 | `AnalysisRequest` | `analysis_session_id`、`position`、`constraint`、`config` | 一次分析的完整位置与根节点约束 |
@@ -76,11 +90,13 @@ summary: 规定 Rust Tauri 命令、引擎事件和前端生成绑定之间的�
 | `ChessManual` | `title`、`date`、`red_player`、`black_player`、`event_name`、`start_fen`、`root`（节点含可选多行 `comment`） | 棋谱和变例树 |
 | `BookMove` | `iccs`、`notation`、`score`、`win_count`、`draw_count`、`lose_count`、`win_rate`、`note`、`source` | 开局库候选走法 |
 
-`GameSnapshot.fen` 保留为 `current_fen` 的兼容别名；`history` 始终是完整主线，`current_ply` 只表示呈现游标。绑定字段名沿用各模型的 `serde` 重命名策略：多数为 snake_case，配置类模型为 camelCase，以生成文件为准。本页只说明边界语义，完整字段以生成绑定与 Rust 的 `specta::Type` 为准。
+`GameSnapshot` 仅供旧普通象棋命令兼容；应用使用 `SessionSnapshot`。两种快照的 `history` 都是完整主线，`current_ply` 只表示呈现游标。绑定字段名沿用各模型的 `serde` 重命名策略：多数为 snake_case，配置类模型为 camelCase，以生成文件为准。本页只说明边界语义，完整字段以生成绑定与 Rust 的 `specta::Type` 为准。
 
 ## 错误语义
 
 `CoreError`、`EngineError`、`ManualError` 统一转换为 `AppError`。可报告错误的命令返回 Specta typed-error 结果，前端经 [`unwrap`](../src/lib/ipc.ts) 转为异常；store 不据错误字符串判断业务状态。
+
+Session 与揭棋文档命令返回结构化 `SessionError`，错误码为 `stale_session`、`invalid_input`、`illegal_move`、`operation_unavailable`、`game_finished` 或 `io_failure`。前端经 `unwrapSession` 保留错误码；`stale_session` 只触发刷新，不自动重试原写操作。
 
 需解析 FEN/ICCS 的命令保留输入错误：`getLegalMoves`、`getCandidateMoves`、`validatePosition`、`isInCheck`、`toChineseNotation`、`makeMove`、`bookQuery` 及引擎分析命令不把无效输入降级为空结果。引擎历史中任一非法 ICCS 使命令失败；`resign` 只接受 `red` 或 `black`。IPC 适配层统一用 `unwrap` 处理 typed-error 结果。
 

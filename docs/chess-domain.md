@@ -1,16 +1,16 @@
 ---
-title: Canglang 中国象棋领域契约
+title: Canglang 象棋与揭棋领域契约
 doc_type: contract
 status: current
 authority: normative
 audience: maintainers
 canonical: true
-summary: 描述棋盘表示、走法编码、合法性、记谱和对局状态的当前契约。
+summary: 描述象棋与其上层揭棋的棋盘表示、走法、规则和统一对局状态契约。
 ---
 
-# Canglang 中国象棋领域契约
+# Canglang 象棋与揭棋领域契约
 
-中国象棋领域实现在 [`src-tauri/src/core`](../src-tauri/src/core)，不依赖 Tauri、Vue、文件 IO 或外部引擎。
+象棋与揭棋领域实现在 [`src-tauri/src/core`](../src-tauri/src/core)，不依赖 Tauri、Vue、文件 IO 或外部引擎。揭棋不是一套平行的棋盘规则：它建立在中国象棋的棋盘、坐标、棋子移动几何和王安全约束之上，再增加随机身份、明暗状态与揭子事件。
 
 ## 棋盘和坐标
 
@@ -26,7 +26,7 @@ FEN 使用十行棋盘布局与走方两段式表示，例如：
 rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w
 ```
 
-`BoardState::from_fen` 校验行数、列数、棋子字符、走方与双方各一将/帅，只保证结构完整与可表示，不判断是否违反完整棋规（照面王仍可解析，以便规则诊断与错误恢复）。完整校验用 `MoveValidator::validate_board`，另查王宫位置与照面王。`to_fen` 生成规范化字符串。跨边界传 FEN，不传 Rust 内部棋盘数组。
+`BoardState::from_fen` 校验行数、列数、棋子字符、走方与双方各一将/帅，只保证结构完整与可表示，不判断是否违反完整棋规（照面王仍可解析，以便规则诊断与错误恢复）。完整校验用 `MoveValidator::validate_board`，另查王宫位置与照面王。`to_fen` 生成规范化字符串。普通象棋跨边界传 FEN，不传 Rust 内部棋盘数组；揭棋不使用 FEN 表达包含秘密的局面。
 
 ## 走法和规则
 
@@ -39,13 +39,21 @@ rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w
 
 走法验证必须在 Rust 完成。前端可请求合法走法做选择高亮，但不得把高亮结果当作最终授权。
 
+## 揭棋叠加规则
+
+揭棋初始棋位与象棋相同，将帅固定并公开，其余 30 子保留阵营和初始位置角色，但真实身份按本方标准子力集合随机分配。暗子首次移动时先按其初始位置角色使用象棋移动几何；移动成功后公开真实身份，以后按真实身份使用同一套几何。揭子不是独立动作，非法走法不会揭示身份或修改状态。
+
+休闲规则允许已揭士、象离开九宫或过河；它们仍使用象棋士斜一步、象斜两步且受象眼阻挡的几何。马腿、象眼、炮架、将帅照面、不能送将和不得直接吃将等基础约束与普通象棋共用。绝杀与困毙判当前走方负；认输和协议和棋由对局状态记录。揭棋不套用普通象棋的 `RuleProfile`、长将长捉裁决或开局库 hash。
+
+`JieqiPosition` 用稳定棋子 ID 关联公开棋子与身份来源。`Assigned` 包含本地私有续局的完整固定身份；`RecordedReveals` 只包含公开回放中已经发生的揭子证据。`JieqiPositionViewV1` 仅返回位置、阵营、明暗状态以及当前公开角色：暗子只暴露首步角色，明子才暴露真实棋种，任何公开 IPC 都不得返回 Assigned 或稳定棋子 ID。
+
 ## 中文记谱
 
 `NotationConverter` 依走前局面与 `Move` 生成繁体中文记谱，也能在明确局面下从中记谱反推走法。引擎 PV 的中文序列由会话层结合当前局面推导，前端不自行猜测。
 
 ## 对局状态
 
-`GameState` 维护当前 `BoardState`、规则档案、`GameResult`、主线历史、悔棋栈与重做栈。
+`GameState` 通过 `ActiveGame` 维护一个普通象棋或揭棋会话，并统一拥有 `game_id`、请求 `revision` 和文档内容 `content_revision`。普通象棋分支维护 `BoardState`、规则档案、`GameResult`、主线历史、悔棋栈与重做栈；揭棋分支维护可恢复的每步位置、公开事件、结果、游标和对弈/训练策略。
 
 - 合法走子更新局面、交换走方、记录被吃棋子、中文记谱与 Zobrist hash。
 - 非法走子不改变局面与历史。
@@ -56,9 +64,11 @@ rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w
 - 认输只在对局进行中改变结果。
 - 绝杀或困毙将当前走方判负；长将、长捉等赛事循环裁决保留在 `rule_assessment` 作为参考提示，不直接改写自然对局结果。
 
-`GameState` 只经只读访问器暴露当前局面、结果与历史；悔棋与重做栈属状态机内部，调用方不得直接修改。失败的走法、撤销或重做不改变状态。
+揭棋训练允许撤销、重做和在历史位置改走，改走截断未来主线；对弈进行中不允许撤销、重做或离开末端改走。终局可回看但不会重新开放走子。公开回放始终只读，只允许跳转、编辑公开备注和再次公开保存。
 
-IPC 用 `GameSnapshot` 暴露轻量视图，其中 `history` 是完整主线、`current_ply` 是呈现游标；前端不依赖 `GameState` 的内部栈结构。
+`GameState` 只经只读访问器暴露当前局面、结果与历史；内部栈、隐藏身份和历史状态不得由调用方直接修改。失败的走法、撤销、重做或版本检查不改变状态。
+
+IPC 用 `SessionSnapshot` 暴露统一视图，其中 `history` 是完整保留主线、`current_ply` 是呈现游标，`capabilities` 给出当前操作是否可用及原因。`PositionView::Xiangqi` 携带 FEN，`PositionView::Jieqi` 携带公开结构。前端不依赖 `GameState` 的内部栈或自行推导棋规。
 
 ## 规则档案
 
@@ -68,4 +78,4 @@ IPC 用 `GameSnapshot` 暴露轻量视图，其中 `history` 是完整主线、`
 
 ## Hash
 
-`ZobristHasher` 为局面、走方与镜像开局库查询提供稳定 hash。hash 只用于索引与比较，不是跨边界棋局格式；展示或传输局面仍用 FEN。
+`ZobristHasher` 为普通象棋局面、走方与镜像开局库查询提供稳定 hash。hash 只用于索引与比较，不是跨边界棋局格式；揭棋不把完整身份摘要用于开局库或公开传输。

@@ -10,7 +10,7 @@ summary: Canglang 的应用组成、运行时关系和主数据流。
 
 # Canglang 架构总览
 
-Vue 提供交互层，Tauri 提供桌面运行时与 IPC 边界，Rust 实现中国象棋领域与本地能力。
+Vue 提供交互层，Tauri 提供桌面运行时与 IPC 边界，Rust 实现中国象棋、建立在象棋规则之上的揭棋领域与本地能力。
 
 ## 组件地图
 
@@ -41,7 +41,8 @@ flowchart TD
 
 - `BookState` 位于 `ipc/book.rs`，管理 `engine/book` 的开局库服务；与引擎进程状态相互独立。
 - `ConfigState` 位于 `ipc/config.rs`，包装 `engine/config::ConfigService`，负责 `config.json` 的读写位置、便携模式检测与原子写入。
-- Store 是后端状态的投影与交互协调层，不是第二个棋局事实源。`GameStore` 以快照覆盖可见状态，引擎事件更新实时分析视图。
+- `GameState` 以 `ActiveGame` 承载普通象棋或揭棋，统一产生带 `game_id`、`revision` 和 `content_revision` 的会话快照。揭棋复用象棋棋子的基础移动几何，再叠加明暗身份、揭子和休闲裁判规则。
+- Store 是后端状态的投影与交互协调层，不是第二个棋局事实源。`GameStore` 以版本化快照覆盖可见状态，引擎事件更新实时分析视图。
 - `App.vue` 只组合工作区和全局 Dialog；`useAppLifecycle` 负责初始化与跨 store 副作用，`useWorkspaceLayout` 负责响应式面板策略。
 - 设置 Dialog 由 `SettingsView.vue` 提供外壳与导航，界面、规则、引擎、开局库、快捷键和关于页分别由 feature tab 负责；引擎设置副作用位于 `useEngineSettings`。
 
@@ -49,7 +50,7 @@ flowchart TD
 
 ### 对局走子
 
-棋盘组件把点击位置转换为 ICCS，`useBoard` 调用 `GameStore`，store 经 `commands.makeMove` 请求 Rust。`GameState` 校验走法并更新局面、历史与结果，经 `GameSnapshot` 返回 FEN、走方、结果和历史视图。
+棋盘组件把点击位置转换为 ICCS，`useBoard` 调用 `GameStore`，store 经 `sessionMove` 请求 Rust。`GameState` 按活动棋种校验走法并更新局面、历史与结果，经 `SessionSnapshot` 返回统一结果、能力和历史；普通象棋位置为 FEN，揭棋位置为不含隐藏身份的公开结构化视图。所有写操作携带会话 token，并在前端串行发送。
 
 ### 引擎分析
 
@@ -57,7 +58,7 @@ flowchart TD
 
 ### 棋谱和开局库
 
-棋谱命令把路径或 `ChessManual` 交给 Rust 服务。`ManualService` 按扩展名分派 PGN/XQF，`OpeningBookService` 管理本地 `.bh` 库与象棋云库，并按当前 `BoardState` 与 `CloudBookMode` 综合查询。前端接收结构化模型，不解析文件字节，也不直接访问云库。
+普通棋谱命令把路径或 `ChessManual` 交给 `ManualService` 分派 PGN/XQF。揭棋 `.cjq` 由 `JieqiDocumentService` 在 Rust 内重放验证：私有续局的固定身份从 `GameState` 直接写盘，公开回放只包含已揭信息。打开文档先在锁外建立候选，再通过统一生命周期协调替换会话。`OpeningBookService` 管理本地 `.bh` 库与象棋云库；它只服务普通象棋。前端接收结构化模型，不解析文件字节，也不直接访问云库。
 
 ### 配置
 
@@ -65,7 +66,7 @@ flowchart TD
 
 ## 运行时状态
 
-启动时 `src-tauri/src/lib.rs` 创建 Tauri builder，注册命令并注入 `GameState`、`EngineState`、`BookState` 与 `ConfigState`。对局以 `Mutex<GameState>` 管理，引擎、开局库与配置各自使用独立异步状态容器。
+启动时 `src-tauri/src/lib.rs` 创建 Tauri builder，注册命令并注入 `GameState`、`EngineState`、`BookState` 与 `ConfigState`。对局以 `Mutex<GameState>` 管理，引擎、开局库与配置各自使用独立状态容器。新局和揭棋文档打开通过 `EngineState` 的生命周期锁协调：候选先准备，提交前复核 token，停止旧引擎任务后原子替换活动对局。
 
 ## 权限边界
 
@@ -77,7 +78,7 @@ flowchart TD
 
 - 新棋规或表示：扩展 `core`，并为领域行为添加 Rust 测试。
 - 新引擎协议：实现 `engine::Protocol`，不在 `EngineSession` 中增加协议分支。
-- 新棋谱格式：在 `manual` 中增加解析器，由 `ManualService` 按扩展名分派。
+- 新普通棋谱格式：在 `manual` 中增加解析器，由 `ManualService` 按扩展名分派；带私有状态的棋种文档使用独立服务，不让秘密经过前端。
 - 新 IPC 能力：在对应 `ipc` 模块添加命令并标记 Specta，重新生成绑定，更新 [IPC 契约](ipc-contract.md)。
 - 新配置项：加入 `AppConfig` 与 `usePreferencesStore`，保持读写成对，并更新 IPC 契约的模型表。
 - 新 UI 行为：优先扩展现有 store、composable 或组件，领域规则留在 Rust。

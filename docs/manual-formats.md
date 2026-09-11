@@ -5,7 +5,7 @@ status: current
 authority: descriptive
 audience: maintainers
 canonical: true
-summary: 描述 PGN、XQF、编码、棋谱变例树以及本地与云库协同的开局库处理边界。
+summary: 描述 PGN、XQF、揭棋 .cjq、棋谱模型以及本地与云库协同的开局库处理边界。
 ---
 
 # Canglang 棋谱与开局库
