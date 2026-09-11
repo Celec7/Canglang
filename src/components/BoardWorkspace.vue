@@ -79,7 +79,7 @@ defineExpose({
           </TooltipContent>
         </Tooltip>
         <span class="hidden shrink-0 text-body-sm text-muted-foreground sm:inline">
-          {{ game.ruleProfile === "china2020" ? "中国规则 2020" : "亚洲/世界规则 2017" }}
+          {{ game.variant === "jieqi" ? (game.playMode === "duel" ? "揭棋 · 对弈" : "揭棋 · 训练") : game.ruleProfile === "china2020" ? "中国规则 2020" : "亚洲/世界规则 2017" }}
         </span>
       </div>
     </header>

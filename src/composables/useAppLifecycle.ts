@@ -130,7 +130,8 @@ export function useAppLifecycle() {
         if (lastPly) {
           const side = lastPly.mover === "red" ? "红方" : "黑方";
           const capture = lastPly.is_capture ? "，吃子" : "";
-          announce(`${side} ${lastPly.notation}${capture}`);
+          const detail = lastPly.public_detail ? `，${lastPly.public_detail}` : capture;
+          announce(`${side} ${lastPly.notation}${detail}`);
         }
         if (game.inCheck && game.result === "ongoing") {
           announce("将军！", "assertive");

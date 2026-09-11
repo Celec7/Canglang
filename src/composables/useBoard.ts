@@ -37,6 +37,7 @@ export function useBoard(_options: { engineMoves?: boolean } = {}) {
     () => {
       selected.value = null;
       legalTargets.value = [];
+      focused.value = null;
     }
   );
 

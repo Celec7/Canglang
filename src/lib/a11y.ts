@@ -55,6 +55,13 @@ export function formatTraditionalSquareLabel(options: SquareLabelOptions): strin
     const side = pieceColor(piece) === "red" ? "红方" : "黑方";
     const name = pieceGlyph(piece);
     text = `${side} ${name}，${posDescription}`;
+    const jieqi = piece.split(":");
+    if (jieqi[0] === "jieqi" && jieqi[1] === "hidden") {
+      const roleNames: Record<string, string> = {
+        king: "将帅", advisor: "士", bishop: "象", knight: "马", rook: "车", cannon: "炮", pawn: "兵卒",
+      };
+      text += `，首步按${roleNames[jieqi[3]] ?? "公开角色"}行走`;
+    }
   } else {
     text = `${posDescription}，空位`;
   }

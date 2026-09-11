@@ -19,6 +19,7 @@ import { startWindowDragging } from "@/lib/window";
 import type { ThemeMode } from "@/lib/preferences";
 import { useEngineStore } from "@/stores/engine";
 import { usePreferencesStore } from "@/stores/preferences";
+import { useGameStore } from "@/stores/game";
 import WindowControls from "./WindowControls.vue";
 import logoUrl from "@/assets/logo.svg";
 
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 
 const engine = useEngineStore();
 const preferences = usePreferencesStore();
+const game = useGameStore();
 
 type ToolbarMenu = "engine" | "record" | "more";
 
@@ -71,6 +73,7 @@ function closeToolbarMenu(restoreFocus = false) {
 }
 
 function selectEngineAction(action: "off" | "analysis" | "red" | "black") {
+  if (!game.capabilities.analyze.enabled && action !== "off") return;
   if (action === "off") engine.setAnalysisEnabled(false);
   if (action === "analysis") engine.setAnalysisOnly();
   if (action === "red") engine.toggleAutoMoveRed();
@@ -249,7 +252,7 @@ function dragWindow(event: MouseEvent) {
               : 'text-muted-foreground/70 hover:text-foreground'
           "
           title="关闭引擎思考与自动走子"
-          @click="engine.setAnalysisEnabled(false)"
+          @click="selectEngineAction('off')"
         >
           关闭分析
         </button>
@@ -262,7 +265,8 @@ function dragWindow(event: MouseEvent) {
               : 'text-muted-foreground hover:text-foreground'
           "
           title="电脑仅分析，不自动走子"
-          @click="engine.setAnalysisOnly()"
+          :disabled="!game.capabilities.analyze.enabled"
+          @click="selectEngineAction('analysis')"
         >
           仅分析
         </button>
@@ -275,7 +279,8 @@ function dragWindow(event: MouseEvent) {
               : 'text-muted-foreground hover:text-foreground'
           "
           title="电脑执红走棋"
-          @click="engine.toggleAutoMoveRed()"
+          :disabled="!game.capabilities.analyze.enabled"
+          @click="selectEngineAction('red')"
         >
           执红
         </button>
@@ -288,7 +293,8 @@ function dragWindow(event: MouseEvent) {
               : 'text-muted-foreground hover:text-foreground'
           "
           title="电脑执黑走棋"
-          @click="engine.toggleAutoMoveBlack()"
+          :disabled="!game.capabilities.analyze.enabled"
+          @click="selectEngineAction('black')"
         >
           执黑
         </button>

@@ -308,7 +308,7 @@ export function computeBoardMotions(
   }
 
   const motions: PieceMotion[] = [];
-  const pieceKinds = ["K", "A", "B", "N", "R", "C", "P", "k", "a", "b", "n", "r", "c", "p"];
+  const pieceKinds = [...new Set([...oldBoard.flat(), ...newBoard.flat()].filter((piece): piece is string => piece !== null))];
 
   for (const p of pieceKinds) {
     const fromSquares: Coord[] = [];

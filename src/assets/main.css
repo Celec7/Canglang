@@ -42,6 +42,8 @@
 
     /* 棋子面：暖象牙骨白（区别于棋盘木色，让棋子从棋盘跳出） */
     --piece-face: #f6eedd;
+    --jieqi-piece-back: #d9c39a;
+    --jieqi-piece-back-mark: #795b38;
 
     /* 象棋阵营色语义（唯一权威，恒色，不随主题改变） */
     --side-red: #b32632;
@@ -90,6 +92,8 @@
 
     /* 棋子面：暗色下稍深的暖象牙 */
     --piece-face: #d8c6a2;
+    --jieqi-piece-back: #a98c60;
+    --jieqi-piece-back-mark: #3f2c1d;
 
     /* 阵营色恒色在暗色面板上不可读，前景变体提亮以保可读性 */
     --side-red-fg: #f2a0a8;
@@ -228,6 +232,19 @@
   .move-hint--corner {
     border: 2px solid var(--board-hint);
     border-radius: 3px;
+  }
+
+  @keyframes jieqi-reveal {
+    0% { opacity: 0.35; filter: brightness(1.5); }
+    100% { opacity: 1; filter: brightness(1); }
+  }
+
+  .jieqi-piece--revealed {
+    animation: jieqi-reveal 260ms ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .jieqi-piece--revealed { animation: none; }
   }
 
   .board-hit-target:focus {

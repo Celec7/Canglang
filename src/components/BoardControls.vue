@@ -11,8 +11,12 @@ import {
 import { ArrowLeftRight, Edit3 } from "@lucide/vue";
 import type { BoardOrientation } from "@/lib/preferences";
 import { usePreferencesStore } from "@/stores/preferences";
+import { useGameStore } from "@/stores/game";
+import { useToast } from "@/composables/useToast";
 
 const preferences = usePreferencesStore();
+const game = useGameStore();
+const { show } = useToast();
 const props = defineProps<{ openPosition: () => void }>();
 
 function toggleCoordinates() {
@@ -26,6 +30,22 @@ function flipBoard() {
     preferences.setBoardOrientation("red");
   } else {
     preferences.setBoardOrientation("red");
+  }
+}
+
+async function offerDraw() {
+  try {
+    await game.offerDraw(game.redToMove ? "red" : "black");
+  } catch (cause) {
+    show(cause instanceof Error ? cause.message : String(cause));
+  }
+}
+
+async function resign() {
+  try {
+    await game.resign(game.redToMove ? "red" : "black");
+  } catch (cause) {
+    show(cause instanceof Error ? cause.message : String(cause));
   }
 }
 </script>
@@ -74,8 +94,10 @@ function flipBoard() {
       </Button>
     </div>
 
-    <div class="ml-auto shrink-0">
-      <Button variant="outline" size="sm" class="h-6 gap-1 px-2.5 text-body-sm" @click="props.openPosition()">
+    <div class="ml-auto flex shrink-0 gap-1">
+      <Button v-if="game.variant === 'jieqi'" variant="ghost" size="sm" :disabled="!game.capabilities.offer_draw.enabled" @click="offerDraw">求和</Button>
+      <Button v-if="game.variant === 'jieqi'" variant="ghost" size="sm" :disabled="!game.capabilities.resign.enabled" @click="resign">认输</Button>
+      <Button v-if="game.capabilities.edit_position.enabled" variant="outline" size="sm" class="h-6 gap-1 px-2.5 text-body-sm" @click="props.openPosition()">
         <Edit3 class="size-3" />
         <span>自定义摆局</span>
       </Button>

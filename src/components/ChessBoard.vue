@@ -24,6 +24,7 @@ import {
   type Turn,
 } from "@/lib/chess";
 import { CHESS_MOVE_EASE } from "@/lib/motion";
+import { parseJieqiPieceToken } from "@/lib/position-view";
 import { useEngineStore } from "@/stores/engine";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -521,6 +522,15 @@ function isKing(piece: string): boolean {
   return piece === "K" || piece === "k" || piece.endsWith(":king");
 }
 
+function isHiddenJieqi(piece: string): boolean {
+  return parseJieqiPieceToken(piece)?.state === "hidden";
+}
+
+function hiddenRoleGlyph(piece: string): string {
+  const parsed = parseJieqiPieceToken(piece);
+  return parsed ? pieceGlyph(`jieqi:revealed:${parsed.color}:${parsed.kind}`) : "";
+}
+
 function shouldShowFocusMark(): boolean {
   if (!keyboardFocus.value) return false;
   const target = focused.value ?? activeSquare.value;
@@ -683,7 +693,7 @@ function shouldShowFocusMark(): boolean {
     <!-- 静态棋子渲染（目标格在动画期间置空，复活棋子立即呈现） -->
     <template v-for="(row, r) in visualBoard" :key="`p${r}`">
       <template v-for="(p, c) in row" :key="`p${r}-${c}`">
-        <g v-if="p" :transform="boardTransform([r, c], preferences.boardOrientation, renderedTurn)">
+        <g v-if="p" :class="{ 'jieqi-piece--revealed': p.startsWith('jieqi:revealed:') }" :transform="boardTransform([r, c], preferences.boardOrientation, renderedTurn)">
           <circle
             v-if="!props.editorMode && renderedInCheck && pieceColor(p) === renderedTurn && isKing(p)"
             :r="BOARD_GEOMETRY.checkRadius"
@@ -692,7 +702,8 @@ function shouldShowFocusMark(): boolean {
             :stroke-width="BOARD_GEOMETRY.checkStroke"
           />
           <circle :r="BOARD_GEOMETRY.pieceRadius" :fill="pieceColor(p) === 'red' ? 'var(--board-red)' : 'var(--board-black)'" stroke="var(--board-line)" :stroke-width="BOARD_GEOMETRY.gridStroke" />
-          <circle :r="BOARD_GEOMETRY.pieceFaceRadius" fill="var(--piece-face)" />
+          <circle :r="BOARD_GEOMETRY.pieceFaceRadius" :fill="isHiddenJieqi(p) ? 'var(--jieqi-piece-back)' : 'var(--piece-face)'" />
+          <circle v-if="isHiddenJieqi(p)" :r="BOARD_GEOMETRY.pieceFaceRadius * 0.72" fill="none" stroke="var(--jieqi-piece-back-mark)" :stroke-width="BOARD_GEOMETRY.gridStroke" stroke-dasharray="3 2" />
           <text
             text-anchor="middle"
             dominant-baseline="central"
@@ -701,6 +712,9 @@ function shouldShowFocusMark(): boolean {
             font-weight="700"
           >
             {{ pieceGlyph(p) }}
+          </text>
+          <text v-if="isHiddenJieqi(p)" text-anchor="middle" :y="BOARD_GEOMETRY.pieceFaceRadius * 0.58" :fill="pieceColor(p) === 'red' ? 'var(--board-red)' : 'var(--board-black)'" :font-size="BOARD_GEOMETRY.pieceFontSize * 0.26" font-weight="600">
+            首步{{ hiddenRoleGlyph(p) }}
           </text>
         </g>
       </template>

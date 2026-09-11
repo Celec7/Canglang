@@ -14,11 +14,14 @@ import PositionEditor from "./components/PositionEditor.vue";
 import SettingsView, { type SettingsTab } from "./components/SettingsView.vue";
 import ToastViewport from "./components/ToastViewport.vue";
 import AnalysisWorkspace from "./components/AnalysisWorkspace.vue";
+import JieqiInfoPanel from "./components/JieqiInfoPanel.vue";
 import WorkspaceSurfaceBar from "./components/WorkspaceSurfaceBar.vue";
 import WorkspaceSurfacePanel from "./components/WorkspaceSurfacePanel.vue";
 import FenDialog from "./components/dialogs/FenDialog.vue";
 import ManualFileDialog from "./components/dialogs/ManualFileDialog.vue";
 import ShortcutsDialog from "./components/dialogs/ShortcutsDialog.vue";
+import NewGameDialog from "./components/dialogs/NewGameDialog.vue";
+import DrawOfferDialog from "./components/dialogs/DrawOfferDialog.vue";
 import { useGameStore } from "./stores/game";
 import { usePreferencesStore } from "./stores/preferences";
 import { useAppLifecycle } from "@/composables/useAppLifecycle";
@@ -46,17 +49,18 @@ const manualOpen = ref(false);
 const positionEditorOpen = ref(false);
 const settingsOpen = ref(false);
 const shortcutsOpen = ref(false);
+const newGameOpen = ref(false);
 const settingsTab = ref<SettingsTab>("appearance");
 const chessBoardRef = ref<{ selected: string | null } | null>(null);
 const surfaceBarRef = ref<{ focusSurface: (surface: WorkspaceSurface) => void } | null>(null);
 
 useShortcuts({
-  onNewGame: () => void game.newGame(),
+  onNewGame: () => { newGameOpen.value = true; },
   onOpenManual: () => {
     manualOpen.value = true;
   },
   onOpenFen: () => {
-    fenOpen.value = true;
+    if (game.capabilities.use_fen.enabled) fenOpen.value = true;
   },
   onOpenSettings: () => openSettings("appearance"),
   onToggleShortcutsHelp: () => {
@@ -78,7 +82,7 @@ function toggleTheme() {
 }
 
 function openPositionEditor() {
-  positionEditorOpen.value = true;
+  if (game.capabilities.edit_position.enabled) positionEditorOpen.value = true;
 }
 
 function closeSurfaceAndRestoreFocus() {
@@ -98,12 +102,12 @@ function closeSurfaceAndRestoreFocus() {
         @toggle-theme="toggleTheme"
         @open-settings="openSettings('appearance')"
         @open-engine-config="openSettings('engine')"
-        @open-fen="fenOpen = true"
+        @open-fen="game.capabilities.use_fen.enabled && (fenOpen = true)"
         @open-manual="manualOpen = true"
         @open-shortcuts="shortcutsOpen = true"
         @toggle-analysis="toggleAnalysis"
         @toggle-move-list="toggleMoveList"
-        @new-game="game.newGame()"
+        @new-game="newGameOpen = true"
       />
 
       <PositionEditor v-if="positionEditorOpen" @close="positionEditorOpen = false" />
@@ -122,7 +126,8 @@ function closeSurfaceAndRestoreFocus() {
             <template v-if="showAnalysis">
               <ResizableHandle id="handle-board-analysis" with-handle />
               <ResizablePanel id="analysis-panel" :default-size="24" :min-size="18" :max-size="45">
-                <AnalysisWorkspace class="h-full w-full" />
+                <AnalysisWorkspace v-if="game.capabilities.analyze.enabled" class="h-full w-full" />
+                <JieqiInfoPanel v-else class="h-full w-full" />
               </ResizablePanel>
             </template>
 
@@ -163,7 +168,8 @@ function closeSurfaceAndRestoreFocus() {
             <ReplayControls class="shrink-0" />
           </WorkspaceSurfacePanel>
           <WorkspaceSurfacePanel v-else-if="activeSurface === 'analysis'" flow class="min-h-[28rem]">
-            <AnalysisWorkspace class="workspace-analysis-flow w-full" />
+            <AnalysisWorkspace v-if="game.capabilities.analyze.enabled" class="workspace-analysis-flow w-full" />
+            <JieqiInfoPanel v-else class="workspace-analysis-flow w-full" />
           </WorkspaceSurfacePanel>
 
         </div>
@@ -174,6 +180,8 @@ function closeSurfaceAndRestoreFocus() {
       <ManualFileDialog v-model:open="manualOpen" />
       <SettingsView v-model:open="settingsOpen" :initial-tab="settingsTab" />
       <ShortcutsDialog v-model:open="shortcutsOpen" />
+      <NewGameDialog v-model:open="newGameOpen" />
+      <DrawOfferDialog />
 
       <!-- 无障碍实时语音广播通道（屏幕阅读器实时区域） -->
       <div class="sr-only" aria-live="polite" aria-atomic="true">

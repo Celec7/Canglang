@@ -18,6 +18,7 @@ export interface UnifiedPly {
   is_capture: boolean;
   is_check: boolean;
   variant: "xiangqi" | "jieqi";
+  public_detail?: string;
 }
 
 const disabledCapability = { enabled: false, reason: "wrong_variant" as const };
@@ -43,6 +44,13 @@ function normalizePly(entry: SessionPly): UnifiedPly {
       variant: "xiangqi",
     };
   }
+  const kinds: Record<string, string> = {
+    king: "将帅", advisor: "士", bishop: "象", knight: "马", rook: "车", cannon: "炮", pawn: "兵卒",
+  };
+  const details: string[] = [];
+  if (entry.ply.revealed) details.push(`揭为${kinds[entry.ply.revealed]}`);
+  if (entry.ply.captured.type === "hidden") details.push("吃暗子");
+  if (entry.ply.captured.type === "revealed") details.push(`吃${kinds[entry.ply.captured.kind]}`);
   return {
     ply: entry.ply.ply,
     iccs: entry.ply.iccs,
@@ -51,6 +59,7 @@ function normalizePly(entry: SessionPly): UnifiedPly {
     is_capture: entry.ply.captured.type !== "none",
     is_check: entry.ply.is_check,
     variant: "jieqi",
+    public_detail: details.join("，") || undefined,
   };
 }
 
@@ -227,6 +236,15 @@ export const useGameStore = defineStore("game", () => {
   async function jumpTo(ply: number) {
     await mutate(async (t) => unwrapSession(await commands.sessionJump(t, ply)));
   }
+  async function offerDraw(side: "red" | "black") {
+    await mutate(async (t) => unwrapSession(await commands.sessionOfferDraw(t, side)));
+  }
+  async function respondDraw(offerId: string, side: "red" | "black", accept: boolean) {
+    await mutate(async (t) => unwrapSession(await commands.sessionRespondDraw(t, offerId, side, accept)));
+  }
+  async function cancelDraw(offerId: string, side: "red" | "black") {
+    await mutate(async (t) => unwrapSession(await commands.sessionCancelDraw(t, offerId, side)));
+  }
 
   return {
     snapshot, gameId, revision, contentRevision, position, startPosition, variant,
@@ -236,5 +254,6 @@ export const useGameStore = defineStore("game", () => {
     capabilities, canUndo, canRedo, lastMove,
     init, refresh, targets, makeMove, replayMove, previewLine, applyPreviewPrefix,
     newSession, newGame, setRuleProfile, undo, redo, resign, jumpTo,
+    offerDraw, respondDraw, cancelDraw,
   };
 });
