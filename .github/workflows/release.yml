@@ -125,6 +125,29 @@ jobs:
             echo "notes=本次发布包含稳定性改进与日常优化。" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Append release file list
+        env:
+          RELEASE_VERSION: ${{ steps.resolve-tag.outputs.version }}
+        run: |
+          cat >> RELEASE_NOTES.md <<'EOF'
+
+          ## File List
+
+          请在下方 **Assets** 中选择适合你系统的文件：
+
+          | File | Platform | Architecture | Notes |
+          | --- | --- | --- | --- |
+          | `Canglang-v__VERSION__-linux-amd64` | Linux | x86_64 | 原生单二进制；需要 GTK 3 和 WebKitGTK 4.1 运行库 |
+          | `Canglang-v__VERSION__-linux-*.AppImage` | Linux | x86_64 | *可能存在性能问题？* |
+          | `Canglang-v__VERSION__-linux-*.deb` | Debian / Ubuntu | amd64 |  |
+          | `Canglang-v__VERSION__-windows-x64-setup.exe` | Windows | x64 | 标准安装版 |
+          | `Canglang-v__VERSION__-windows-x64-portable.zip` | Windows | x64 | 解压即用，无需安装 |
+          | `Canglang-v__VERSION__-*.dmg` | macOS | ARM64 | 适用于 Apple Silicon 系列 Mac |
+
+          `amd64` / `x86_64` / `x64` 表示 Intel/AMD 64 位；`ARM64` / `aarch64` 表示 ARM64 架构。
+          EOF
+          sed -i "s/__VERSION__/${RELEASE_VERSION}/g" RELEASE_NOTES.md
+
       - name: Create or reuse draft release
         id: create-release
         env:
