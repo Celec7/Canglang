@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_GAME_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone)]
+// GameState 始终只持有一个活动对局，小型内联状态比全链路 Box 间接访问更清晰
+#[allow(clippy::large_enum_variant)]
 pub enum ActiveGame {
     Xiangqi(XiangqiGame),
     Jieqi(JieqiGame),

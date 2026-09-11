@@ -47,6 +47,8 @@ Store 经 `src/lib/ipc.ts` 调用命令。`GameStore` 用 `SessionSnapshot` 覆�
 
 普通走子或应用 PV 成功后，`GameStore` 将后端快照中游标以内的历史交给 `ManualStore.recordHistory`，同步普通棋谱树。清空棋谱后继续走子同样恢复完整的当前历史。已有节点、备注与分支保留，新节点使棋谱进入待保存状态并使旧导出文本失效；后端拒绝整条 PV 时不更新棋谱。揭棋走子不建立 `ChessManual` 或伪造 FEN；`ManualStore` 只保存一份公开元数据和 `ply → 备注`，训练改走截断主线时同步删除越界备注。
 
+普通棋谱的历史导入链路不持有揭棋私有身份，因此不能从揭棋会话直接跨棋种替换。用户先通过受未保存保护和生命周期协调的新局流程切换到中国象棋，再打开 PGN/XQF；`.cjq` 打开则由 Rust 在锁外完整验证候选后原子替换当前会话。
+
 PGN/XQF 保存记录发起请求时的编辑版本，只在成功且版本未改变时清除待保存标记。揭棋保存回执必须同时匹配 `game_id`、`content_revision`、`edit_revision` 与当前原生种类；保存期间新增走子、修改备注或替换对局不会被旧请求误标为已保存。私有局导出公开回放不会清除私有续局 dirty，公开回放原生保存可以清除其编辑 dirty。
 
 `useAppLifecycle` 在应用挂载时注册 Tauri 窗口关闭监听。新局、打开文档和关闭窗口都调用 `ManualStore.confirmDiscard`，由全局 `UnsavedChangesDialog` 提供保存、放弃、取消三路选择；路径选择取消或保存失败保持当前工作并阻止后续替换，成功保存完成后才继续。卸载时注销窗口监听。

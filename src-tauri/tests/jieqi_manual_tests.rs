@@ -1,7 +1,7 @@
 use canglang_app::core::jieqi::{
     JieqiGame, JieqiIdentity, JieqiPlayMode, JieqiPosition, JieqiReveal, standard_identity_kinds,
 };
-use canglang_app::core::piece::PieceKind;
+use canglang_app::core::piece::{Color, PieceKind};
 use canglang_app::core::position::Move;
 use canglang_app::manual::jieqi::{
     JieqiDocumentCodec, JieqiDocumentKind, JieqiDocumentMetadata, JieqiDocumentService,
@@ -71,6 +71,7 @@ fn private_and_public_documents_round_trip_the_verified_main_line() {
         assert_eq!(loaded.history(), source.history());
         assert_eq!(loaded.head_ply(), 2);
         assert_eq!(loaded.current_ply(), 2);
+        assert_eq!(loaded.play_mode(), source.play_mode());
         assert_eq!(public.kind, kind);
         assert_eq!(public.annotations, annotations());
         match kind {
@@ -81,6 +82,41 @@ fn private_and_public_documents_round_trip_the_verified_main_line() {
             }
         }
     }
+}
+
+#[test]
+fn private_document_restores_fixed_identities_result_and_next_reveal() {
+    let mut source = game();
+    let bytes = JieqiDocumentCodec::encode(
+        &source,
+        JieqiDocumentKind::PrivateGame,
+        metadata(),
+        annotations(),
+    )
+    .unwrap();
+    let (mut loaded, _) = JieqiDocumentCodec::decode(&bytes).unwrap();
+
+    assert_eq!(
+        loaded.initial_position().identities(),
+        source.initial_position().identities()
+    );
+    let expected = source
+        .make_move(Move::from_iccs("c3c4").unwrap())
+        .unwrap()
+        .clone();
+    let actual = loaded.make_move(Move::from_iccs("c3c4").unwrap()).unwrap();
+    assert_eq!(actual, &expected);
+
+    loaded.resign(Color::Black).unwrap();
+    let bytes = JieqiDocumentCodec::encode(
+        &loaded,
+        JieqiDocumentKind::PrivateGame,
+        metadata(),
+        annotations(),
+    )
+    .unwrap();
+    let (resumed, _) = JieqiDocumentCodec::decode(&bytes).unwrap();
+    assert_eq!(resumed.result(), loaded.result());
 }
 
 #[test]
@@ -180,6 +216,27 @@ fn service_atomically_replaces_existing_file_and_leaves_no_sibling_artifacts() {
         })
         .count();
     assert_eq!(siblings, 0);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn failed_save_validation_preserves_the_existing_file() {
+    let path = temp_path("preserve");
+    std::fs::write(&path, b"old content").unwrap();
+
+    let invalid_annotations = BTreeMap::from([(3, "超出当前主线".into())]);
+    assert!(
+        JieqiDocumentService::save(
+            &game(),
+            path.to_str().unwrap(),
+            JieqiDocumentKind::PrivateGame,
+            metadata(),
+            invalid_annotations,
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), b"old content");
+
     std::fs::remove_file(path).unwrap();
 }
 

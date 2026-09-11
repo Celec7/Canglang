@@ -233,6 +233,20 @@ test("加载失败保留当前路径、元数据、备注与棋局", async () =>
   assert.match(manual.error, /损坏/);
 });
 
+test("揭棋局不能经非事务的普通棋谱链路跨棋种替换", async () => {
+  const { game, manual } = await prepare();
+  let loads = 0;
+  commands.manualLoad = async () => {
+    loads += 1;
+    throw new Error("不应调用");
+  };
+
+  assert.equal(await manual.openXiangqi("other.pgn"), false);
+  assert.equal(loads, 0);
+  assert.equal(game.variant, "jieqi");
+  assert.match(manual.error, /先通过新局切换/);
+});
+
 test("未保存保护支持取消、放弃以及等待保存完成", async () => {
   const { game, manual } = await prepare();
   manual.updateJieqiComment(0, "待处理");

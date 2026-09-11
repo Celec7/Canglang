@@ -211,12 +211,11 @@ fn collect_public_reveals(moves: &[JieqiDocumentMove]) -> Result<Vec<JieqiReveal
         };
         positions.remove(&mv.to);
         positions.insert(mv.to, piece_id);
-        if let Some(kind) = entry.revealed {
-            if kind == JieqiPublicKind::King
-                || revealed.insert(piece_id, to_piece_kind(kind)).is_some()
-            {
-                return invalid("公开棋谱包含非法或重复揭子事件");
-            }
+        if let Some(kind) = entry.revealed
+            && (kind == JieqiPublicKind::King
+                || revealed.insert(piece_id, to_piece_kind(kind)).is_some())
+        {
+            return invalid("公开棋谱包含非法或重复揭子事件");
         }
     }
     Ok(revealed

@@ -249,15 +249,6 @@ async function saveJieqi(kind: "private_game" | "public_replay") {
           </div>
         </div>
 
-        <div class="flex flex-col gap-1.5 border-t pt-3">
-          <label class="font-medium text-foreground">切换并打开中国象棋棋谱 (.pgn / .xqf)</label>
-          <div class="flex flex-wrap gap-2">
-            <Input v-model="loadPath" placeholder="输入文件绝对路径..." class="min-w-0 flex-1" />
-            <Button variant="outline" size="sm" aria-label="浏览中国象棋棋谱" @click="pickLoadFile"><FolderOpen class="size-3.5" />浏览</Button>
-            <Button variant="outline" size="sm" :disabled="manual.loading" @click="loadFile">打开</Button>
-          </div>
-        </div>
-
         <div class="grid grid-cols-1 gap-2 border-t pt-3 sm:grid-cols-2">
           <label class="flex flex-col gap-1">标题<Input v-model="manual.jieqiMetadata.title" aria-label="揭棋标题" /></label>
           <label class="flex flex-col gap-1">日期<Input v-model="manual.jieqiMetadata.date" aria-label="揭棋日期" /></label>

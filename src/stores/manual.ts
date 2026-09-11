@@ -284,6 +284,10 @@ export const useManualStore = defineStore("manual", () => {
   async function openXiangqi(path: string): Promise<boolean> {
     const normalizedPath = path.trim();
     if (!normalizedPath) return false;
+    if (game.variant === "jieqi") {
+      error.value = "请先通过新局切换到中国象棋，再打开普通棋谱";
+      return false;
+    }
     loading.value = true;
     error.value = null;
     const previous = {
@@ -304,18 +308,7 @@ export const useManualStore = defineStore("manual", () => {
       resetPath();
       const nodes: ManualNode[] = [];
       appendMainline(candidate.root, nodes);
-      if (game.variant === "jieqi") {
-        const reset = await game.newGame(candidate.start_fen || undefined, {
-          preserveManual: true,
-          skipManualGuard: true,
-        });
-        if (!reset) throw new Error("无法建立棋谱起始局面");
-        for (const node of nodes) {
-          const iccs = nodeMove(node);
-          if (iccs && !(await game.replayMove(iccs)).legal) throw new Error(`走法无法应用：${iccs}`);
-        }
-        setPath(nodes);
-      } else if (!(await applyNodes(nodes))) {
+      if (!(await applyNodes(nodes))) {
         throw new Error(error.value ?? "棋谱中包含无法应用的走法");
       }
       documentKind.value = "xiangqi";
